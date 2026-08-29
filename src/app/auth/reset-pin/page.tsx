@@ -38,10 +38,14 @@ function ResetInner() {
     setLoading(true);
 
     try {
+      const sb = getSupabase();
+      const { data: { session } } = await sb!.auth.getSession();
+      if (!session) { setErr("انتهت الجلسة"); setLoading(false); return; }
+
       const res = await fetch("/api/auth/reset-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify({ pin, accessToken: session.access_token }),
       });
       const data = await res.json();
       setLoading(false);

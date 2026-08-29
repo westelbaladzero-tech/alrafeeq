@@ -3,7 +3,7 @@ import { getAdminClient, getServerClient } from "@/lib/supabase-server";
 import * as crypto from "crypto";
 
 export async function POST(req: NextRequest) {
-  const { pin } = await req.json();
+  const { pin, accessToken } = await req.json();
   if (!pin || pin.length < 4) {
     return NextResponse.json({ error: "الرمز يجب أن يكون 4 خانات على الأقل" }, { status: 400 });
   }
@@ -12,7 +12,11 @@ export async function POST(req: NextRequest) {
   const sb = getServerClient();
   if (!admin || !sb) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
-  const { data: { user } } = await sb.auth.getUser();
+  if (!accessToken) {
+    return NextResponse.json({ error: "لم يتم تأكيد الإيميل" }, { status: 401 });
+  }
+
+  const { data: { user } } = await sb.auth.getUser(accessToken);
   if (!user || !user.email) {
     return NextResponse.json({ error: "لم يتم تأكيد الإيميل" }, { status: 401 });
   }

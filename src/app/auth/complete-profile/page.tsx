@@ -55,10 +55,14 @@ function CompleteInner() {
 
     setLoading(true);
     try {
+      const sb = getSupabase();
+      const { data: { session } } = await sb!.auth.getSession();
+      if (!session) { setErr("انتهت الجلسة. أعد التسجيل"); setLoading(false); return; }
+
       const res = await fetch("/api/auth/complete-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, pin }),
+        body: JSON.stringify({ phone, pin, accessToken: session.access_token }),
       });
       const data = await res.json();
       setLoading(false);
