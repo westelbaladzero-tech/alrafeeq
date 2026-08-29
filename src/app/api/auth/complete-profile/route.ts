@@ -1,38 +1,51 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAdminClient } from '@/lib/supabase-server';
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminClient } from "@/lib/supabase-server";
+import { getSupabase } from "@/lib/supabase";
+import * as crypto from "crypto";
 
-// إكمال الملف الشخصي بعد تأكيد الماجيك لينك
+// إكمال الملف: رقم هاتف + رمز (بعد تأكيد الماجيك لينك)
 export async function POST(req: NextRequest) {
-  const { email } = await req.json();
-  if (!email) return NextResponse.json({ error: 'الإيميل مطلوب' }, { status: 400 });
-
-  const admin = getAdminClient();
-  if (!admin) return NextResponse.json({ error: 'خطأ إعداد' }, { status: 500 });
-
-  // جلب التسجيل المعلق
-  const { data: pending } = await admin
-    .from('pending_registrations').select('*').eq('email', email).maybeSingle();
-
-  if (!pending) {
-    // قد يكون تسجيل دخول عادي أو استعادة — نتأكد من وجود الملف
-    const { data: existing } = await admin
-      .from('profiles').select('email').eq('email', email).maybeSingle();
-    if (existing) return NextResponse.json({ ok: true });
-    return NextResponse.json({ error: 'لا يوجد تسجيل معلق' }, { status: 404 });
+  const { phone, pin } = await req.json();
+  if (!phone || !pin || pin.length < 4) {
+    return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
   }
 
-  // إنشاء الملف الشخصي
-  const { error } = await admin.from('profiles').insert({
-    email: pending.email,
-    phone: pending.phone,
-    pin_hash: pending.pin_hash,
+  const sb = getSupabase();
+  if (!sb) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
+
+  // تحقق من الجلسة
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user || !user.email) {
+    return NextResponse.json({ error: "لم يتم تأكيد الإيميل" }, { status: 401 });
+  }
+
+  const admin = getAdminClient();
+  if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
+
+  // تحقق: الرقم غير مستخدم بإيميل آخر
+  const { data: existingPhone } = await admin
+    .from("profiles").select("email").eq("phone", phone).maybeSingle();
+  if (existingPhone) {
+    return NextResponse.json({ error: "رقم الهاتف مرتبط بإيميل آخر" }, { status: 409 });
+  }
+
+  // تشفير الرمز
+  const pinHash = crypto.scryptSync(pin, user.email, 64).toString("hex");
+
+  // أنشئ الملف الشخصي
+  const { error } = await admin.from("profiles").insert({
+    id: user.id,
+    email: user.email,
+    phone,
+    pin_hash: pinHash,
     email_verified: true,
+    failed_attempts: 0,
+    locked_until: null,
   });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: "تعذر حفظ البيانات" }, { status: 500 });
+  }
 
-  // حذف من المعلق
-  await admin.from('pending_registrations').delete().eq('email', email);
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, message: "تم ربط البيانات" });
 }
