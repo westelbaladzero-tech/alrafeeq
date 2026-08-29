@@ -7,13 +7,20 @@ export async function POST(req: NextRequest) {
   if (!email) return NextResponse.json({ error: "الإيميل مطلوب" }, { status: 400 });
 
   const sb = getSupabase();
-  if (!sb) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
+  if (!sb) return NextResponse.json({ error: "خطأ إعداد — المفاتيح غير متوفرة" }, { status: 500 });
+
+  const redirectUrl = `${req.nextUrl.origin}/auth/callback`;
+  console.log("Register attempt:", email, "redirect:", redirectUrl);
 
   const { error } = await sb.auth.signInWithOtp({
     email,
-    options: { emailRedirectTo: `${req.nextUrl.origin}/auth/callback` },
+    options: { emailRedirectTo: redirectUrl },
   });
 
-  if (error) return NextResponse.json({ error: "تعذر إرسال رابط التأكيد" }, { status: 500 });
+  if (error) {
+    console.error("Supabase OTP error:", error.message, error.code);
+    return NextResponse.json({ error: `خطأ: ${error.message}` }, { status: 500 });
+  }
+
   return NextResponse.json({ ok: true, message: "تم إرسال رابط التأكيد" });
 }
