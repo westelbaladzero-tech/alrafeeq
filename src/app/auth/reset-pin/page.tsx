@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Lock, Check, Wallet } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
@@ -10,26 +10,25 @@ function ResetInner() {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("exchanging");
+  const [status, setStatus] = useState("waiting");
   const [err, setErr] = useState("");
+  const initRef = useRef(false);
 
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+    
     async function init() {
       const sb = getSupabase();
       if (!sb) { router.replace("/auth/login"); return; }
 
-      const code = params.get("code");
-      if (code) {
-        const { data, error } = await sb.auth.exchangeCodeForSession(code);
-        if (error || !data.user) { router.replace("/auth/login"); return; }
-      }
-
+      await new Promise(r => setTimeout(r, 500));
       const { data: { user } } = await sb.auth.getUser();
       if (!user) { router.replace("/auth/login"); return; }
       setStatus("form");
     }
     init();
-  }, [params, router]);
+  }, [router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,7 +54,7 @@ function ResetInner() {
     }
   }
 
-  if (status === "exchanging")
+  if (status === "waiting")
     return <div className="flex items-center justify-center h-screen text-gray-400">جاري التأكيد...</div>;
 
   if (status === "done") {

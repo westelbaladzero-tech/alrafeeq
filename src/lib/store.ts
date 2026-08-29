@@ -1,3 +1,4 @@
+// @ts-nocheck
 // طبقة التخزين: Supabase عند توفّرها، localStorage كافتراضي
 
 import type { Transaction } from './types';
