@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 // تسجيل جديد: إيميل فقط → ماجيك لينك
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
   if (!email) return NextResponse.json({ error: "الإيميل مطلوب" }, { status: 400 });
 
-  const sb = getSupabase();
-  if (!sb) return NextResponse.json({ error: "خطأ إعداد — المفاتيح غير متوفرة" }, { status: 500 });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) {
+    return NextResponse.json({ error: "خطأ إعداد — المفاتيح غير متوفرة" }, { status: 500 });
+  }
+
+  // عميل خادم بدون persistSession (يشتغل على server)
+  const sb = createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   const redirectUrl = `${req.nextUrl.origin}/auth/callback`;
-  console.log("Register attempt:", email, "redirect:", redirectUrl);
 
   const { error } = await sb.auth.signInWithOtp({
     email,
