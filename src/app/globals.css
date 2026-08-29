@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f7f8fa;
+  --card: #fff;
+  --text: #17202a;
+  --muted: #68727d;
+  --accent: #1d7a5a;
+  --soft: #eaf5f0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Cairo', 'Noto Sans Arabic', Arial, sans-serif;
+}
+
+button, input { font: inherit; }
+
+/* تمرير سلس */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
