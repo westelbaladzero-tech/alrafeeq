@@ -1,29 +1,41 @@
 'use client';
 import { useState } from 'react';
-import { MessageCircle, BarChart3, Receipt, Wallet } from 'lucide-react';
+import { MessageCircle, BarChart3, Receipt, Wallet, LogOut } from 'lucide-react';
 import ChatView from '@/components/ChatView';
 import DashboardView from '@/components/DashboardView';
 import HistoryView from '@/components/HistoryView';
+import { getSupabase } from '@/lib/supabase';
 
 type Tab = 'chat' | 'dashboard' | 'history';
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('chat');
 
+  async function handleLogout() {
+    const sb = getSupabase();
+    if (sb) await sb.auth.signOut();
+    window.location.reload();
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center">
-      <header className="w-full max-w-3xl px-5 py-5 flex items-center justify-between bg-white">
+      <header className="w-full max-w-3xl px-5 py-4 flex items-center justify-between bg-white">
         <div>
           <div className="text-2xl font-bold">الرفيق</div>
-          <div className="text-sm text-gray-500">الصديق الأمين لإدارة أموالك</div>
+          <div className="text-xs text-gray-400">الصديق الأمين</div>
         </div>
-        <div className="w-11 h-11 rounded-2xl bg-[var(--soft)] flex items-center justify-center">
-          <Wallet size={22} className="text-[var(--accent)]" />
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-[var(--soft)] flex items-center justify-center">
+            <Wallet size={20} className="text-[var(--accent)]" />
+          </div>
+          <button onClick={handleLogout} className="text-gray-400 hover:text-red-400 p-2" title="تسجيل الخروج">
+            <LogOut size={18} />
+          </button>
         </div>
       </header>
 
       <section className="w-full max-w-3xl flex-1 px-4 pb-24">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden h-[72vh] flex flex-col">
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden h-[68vh] flex flex-col">
           {tab === 'chat' && <ChatView />}
           {tab === 'dashboard' && <DashboardView />}
           {tab === 'history' && <HistoryView />}
@@ -42,8 +54,7 @@ export default function Home() {
 function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
     <button onClick={onClick} className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition ${active ? 'text-[var(--accent)]' : 'text-gray-400'}`}>
-      {icon}
-      <span className="text-xs">{label}</span>
+      {icon}<span className="text-xs">{label}</span>
     </button>
   );
 }

@@ -1,19 +1,12 @@
-// عميل Supabase — يتصل تلقائياً عند توفّر المفاتيح
-// بدون المفاتيح، التطبيق يعمل بـ localStorage
+// عميل Supabase للمتصفح
+import { createBrowserClient } from '@supabase/ssr';
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export const isSupabaseEnabled = !!URL && !!ANON;
 
-export const isSupabaseEnabled = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
-
-let client: SupabaseClient | null = null;
-
-export function getSupabase(): SupabaseClient | null {
+export function getSupabase() {
   if (!isSupabaseEnabled) return null;
-  if (!client && SUPABASE_URL && SUPABASE_ANON_KEY) {
-    client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }
-  return client;
+  return createBrowserClient(URL, ANON);
 }

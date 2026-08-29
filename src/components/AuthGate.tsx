@@ -1,0 +1,31 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { getSupabase } from '@/lib/supabase';
+import Splash from './Splash';
+
+export default function AuthGate({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [authed, setAuthed] = useState(false);
+
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) { setLoading(false); return; }
+
+    sb.auth.getSession().then(({ data }) => {
+      setAuthed(!!data.session);
+      setLoading(false);
+    });
+
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => {
+      setAuthed(!!session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen text-gray-400">جاري التحميل...</div>;
+  }
+
+  if (!authed) return <Splash />;
+  return <>{children}</>;
+}
