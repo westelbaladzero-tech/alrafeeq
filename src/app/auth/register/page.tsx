@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Mail, Send, Wallet } from "lucide-react";
+import { getSupabase } from "@/lib/supabase";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -15,22 +16,24 @@ export default function RegisterPage() {
     if (!email) { setErr("أدخل الإيميل"); return; }
     setLoading(true);
 
-    try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      setLoading(false);
+    const sb = getSupabase();
+    if (!sb) { setLoading(false); setErr("خطأ إعداد"); return; }
 
-      if (data.error) { setErr(data.error); return; }
-      setSent(true);
-      setMsg("تم إرسال رابط التأكيد إلى إيميلك. افتح الرسالة واضغط الرابط لإكمال التسجيل.");
-    } catch {
-      setLoading(false);
-      setErr("تعذّر الاتصال. حاول مرة أخرى");
+    // إرسال الماجيك لينك من المتصفّح مباشرة (PKCE code verifier يتخزّن صح)
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+
+    setLoading(false);
+
+    if (error) {
+      setErr(error.message.includes("rate") ? "تم تجاوز حد الإرسال. انتظر دقائق وحاول" : error.message);
+      return;
     }
+
+    setSent(true);
+    setMsg("تم إرسال رابط التأكيد إلى إيميلك. افتح الرسالة واضغط الرابط لإكمال التسجيل.");
   }
 
   return (
