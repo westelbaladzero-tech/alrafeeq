@@ -10,17 +10,22 @@ const METHOD_LABELS: Record<string, string> = {
 
 export default function HistoryView() {
   const [txs, setTxs] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const update = () => setTxs(getTransactions());
-    update();
-    window.addEventListener('storage', update);
-    return () => window.removeEventListener('storage', update);
+    let mounted = true;
+    const load = async () => {
+      const data = await getTransactions();
+      if (mounted) { setTxs(data); setLoading(false); }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => { mounted = false; clearInterval(interval); };
   }, []);
 
-  function handleDelete(id: string) {
-    deleteTransaction(id);
-    setTxs(getTransactions());
+  async function handleDelete(id: string) {
+    await deleteTransaction(id);
+    setTxs(prev => prev.filter(t => t.id !== id));
   }
 
   function formatDate(iso: string): string {
@@ -28,11 +33,14 @@ export default function HistoryView() {
     return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
+  if (loading) {
+    return <div className="flex items-center justify-center h-full text-gray-400">جاري التحميل...</div>;
+  }
+
   if (txs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
-        <Inbox size={48} />
-        <p>لا توجد عمليات مسجلة بعد</p>
+        <Inbox size={48} /><p>لا توجد عمليات مسجلة بعد</p>
       </div>
     );
   }

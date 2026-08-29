@@ -11,6 +11,7 @@ export default function ChatView() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([{ role: 'bot', text: WELCOME }]);
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [saving, setSaving] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,9 +35,10 @@ export default function ChatView() {
     }
   }
 
-  function confirm() {
+  async function confirm() {
     if (!proposal) return;
-    addTransaction({
+    setSaving(true);
+    await addTransaction({
       type: proposal.type,
       amount: proposal.amount,
       category: proposal.category,
@@ -44,9 +46,10 @@ export default function ChatView() {
       method: proposal.method,
       note: proposal.note,
     });
+    setSaving(false);
     setMessages(x => [...x, {
       role: 'bot',
-      text: `✅ تم اعتماد العملية: ${proposal.amount.toLocaleString('ar-EG')} جنيه — ${proposal.type === 'income' ? 'وارد' : 'مصروف'} → ${proposal.category}`,
+      text: `✅ تم اعتماد العملية وحفظها: ${proposal.amount.toLocaleString('ar-EG')} جنيه — ${proposal.type === 'income' ? 'وارد' : 'مصروف'} → ${proposal.category}`,
     }]);
     setProposal(null);
   }
@@ -68,7 +71,6 @@ export default function ChatView() {
             {m.role === 'user' && <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0"><UserRound size={18} /></div>}
           </div>
         ))}
-
         {proposal && (
           <div className="bg-white border-2 border-[var(--accent)] rounded-2xl p-4 max-w-[85%] mr-auto shadow-sm">
             <div className="font-bold mb-2 flex items-center gap-2">
@@ -81,27 +83,18 @@ export default function ChatView() {
               <div className="text-gray-400 text-xs mt-1">{proposal.note}</div>
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={confirm} className="flex-1 rounded-xl bg-[var(--accent)] text-white py-3 flex items-center justify-center gap-2 font-bold">
-                <Check size={18} /> تأكيد
+              <button onClick={confirm} disabled={saving} className="flex-1 rounded-xl bg-[var(--accent)] text-white py-3 flex items-center justify-center gap-2 font-bold disabled:opacity-50">
+                <Check size={18} /> {saving ? 'جاري الحفظ...' : 'تأكيد'}
               </button>
               <button onClick={reject} className="rounded-xl bg-gray-100 text-gray-600 px-5">إلغاء</button>
             </div>
           </div>
         )}
       </div>
-
       <div className="p-4 border-t bg-white">
         <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && send()}
-            placeholder="مثال: دفعت 250 جنيه بنزين"
-            className="flex-1 bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100"
-          />
-          <button onClick={send} className="w-12 h-12 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0">
-            <Send size={19} />
-          </button>
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="مثال: دفعت 250 جنيه بنزين" className="flex-1 bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
+          <button onClick={send} className="w-12 h-12 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0"><Send size={19} /></button>
         </div>
       </div>
     </div>
@@ -109,8 +102,6 @@ export default function ChatView() {
 }
 
 function methodLabel(m: string): string {
-  const map: Record<string, string> = {
-    cash: 'نقدي', card: 'بطاقة', wallet: 'محفظة إلكترونية', bank: 'تحويل بنكي', unknown: 'غير محدد',
-  };
+  const map: Record<string, string> = { cash: 'نقدي', card: 'بطاقة', wallet: 'محفظة إلكترونية', bank: 'تحويل بنكي', unknown: 'غير محدد' };
   return map[m] || 'غير محدد';
 }

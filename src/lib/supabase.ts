@@ -1,12 +1,19 @@
-// عميل Supabase — جاهز للربط عند توفّر المفاتيح
-// NEXT_PUBLIC_SUPABASE_URL و NEXT_PUBLIC_SUPABASE_ANON_KEY
-// بدون المفاتيح، التطبيق يعمل بـ localStorage تلقائياً
+// عميل Supabase — يتصل تلقائياً عند توفّر المفاتيح
+// بدون المفاتيح، التطبيق يعمل بـ localStorage
 
-export const isSupabaseEnabled =
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
-  !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-// للتفعيل:
-// 1) أنشئ مشروع على https://supabase.com
-// 2) نفّذ ملف supabase/schema.sql في محرر SQL
-// 3) أضف المفاتيح في .env.local
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+export const isSupabaseEnabled = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+
+let client: SupabaseClient | null = null;
+
+export function getSupabase(): SupabaseClient | null {
+  if (!isSupabaseEnabled) return null;
+  if (!client && SUPABASE_URL && SUPABASE_ANON_KEY) {
+    client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+  return client;
+}

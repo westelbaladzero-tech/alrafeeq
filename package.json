@@ -1,6 +1,28 @@
 {
-  "name":"alrafeeq","version":"0.1.0","private":true,
-  "scripts":{"dev":"next dev","build":"next build","start":"next start","lint":"eslint ."},
-  "dependencies":{"next":"latest","react":"latest","react-dom":"latest","lucide-react":"latest"},
-  "devDependencies":{"@types/node":"latest","@types/react":"latest","@types/react-dom":"latest","typescript":"latest","tailwindcss":"latest","@tailwindcss/postcss":"latest","eslint":"latest","eslint-config-next":"latest"}
+  "name": "alrafeeq",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
+    "lucide-react": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
 }
