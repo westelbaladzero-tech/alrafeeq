@@ -1,32 +1,51 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Phone, Lock, Check, Wallet } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
-export default function CompleteProfilePage() {
+function CompleteInner() {
+  const params = useSearchParams();
+  const router = useRouter();
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [status, setStatus] = useState("exchanging"); // exchanging → form → done
   const [err, setErr] = useState("");
-  const [done, setDone] = useState(false);
   const [email, setEmail] = useState("");
+  const [exchangeErr, setExchangeErr] = useState("");
 
   useEffect(() => {
-    async function check() {
+    async function init() {
       const sb = getSupabase();
-      if (!sb) { setChecking(false); return; }
+      if (!sb) { router.replace("/auth/login"); return; }
+
+      // لو في رمز بالرابط، بدّله
+      const code = params.get("code");
+      if (code) {
+        const { data, error } = await sb.auth.exchangeCodeForSession(code);
+        if (error || !data.user) {
+          setExchangeErr(error?.message || "فشل تأكيد الإيميل");
+          setStatus("error");
+          return;
+        }
+      }
+
+      // تحقق من الجلسة
       const { data: { user } } = await sb.auth.getUser();
-      if (!user) { window.location.href = "/auth/login"; return; }
+      if (!user) { router.replace("/auth/login"); return; }
       setEmail(user.email || "");
-      // تحقق إذا الملف موجود
-      const { data: profile } = await sb.from("profiles").select("id").eq("id", user.id).maybeSingle();
-      if (profile) { window.location.href = "/"; return; }
-      setChecking(false);
+
+      // تحقق: الملف موجود؟
+      const { data: profile } = await sb
+        .from("profiles").select("id").eq("id", user.id).maybeSingle();
+      if (profile) { router.replace("/"); return; }
+
+      setStatus("form");
     }
-    check();
-  }, []);
+    init();
+  }, [params, router]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,7 +64,7 @@ export default function CompleteProfilePage() {
       const data = await res.json();
       setLoading(false);
       if (data.error) { setErr(data.error); return; }
-      setDone(true);
+      setStatus("done");
       setTimeout(() => { window.location.href = "/"; }, 1500);
     } catch {
       setLoading(false);
@@ -53,9 +72,23 @@ export default function CompleteProfilePage() {
     }
   }
 
-  if (checking) return <div className="flex items-center justify-center h-screen text-gray-400">جاري التحميل...</div>;
+  if (status === "exchanging") {
+    return <div className="flex items-center justify-center h-screen text-gray-400">جاري تأكيد الإيميل...</div>;
+  }
 
-  if (done) {
+  if (status === "error") {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-5">
+        <div className="text-center max-w-sm">
+          <div className="text-red-500 text-lg font-bold mb-2">خطأ</div>
+          <p className="text-gray-500 mb-4">{exchangeErr}</p>
+          <a href="/auth/register" className="text-[var(--accent)] font-bold">حاول مرة أخرى</a>
+        </div>
+      </main>
+    );
+  }
+
+  if (status === "done") {
     return (
       <main className="min-h-screen flex items-center justify-center p-5">
         <div className="text-center">
@@ -80,7 +113,6 @@ export default function CompleteProfilePage() {
           <p className="text-sm text-gray-500">مرحباً {email}</p>
           <p className="text-xs text-gray-400 mt-1">اربط رقم هاتفك ورمز الحماية</p>
         </div>
-
         <form onSubmit={submit} className="space-y-3">
           <div className="relative">
             <Phone size={18} className="absolute right-3 top-3.5 text-gray-300" />
@@ -106,4 +138,10 @@ export default function CompleteProfilePage() {
       </div>
     </main>
   );
+}
+
+export default function CompleteProfilePage() {
+  return <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-400">جاري التحميل...</div>}>
+    <CompleteInner />
+  </Suspense>;
 }

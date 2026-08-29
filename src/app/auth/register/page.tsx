@@ -19,19 +19,17 @@ export default function RegisterPage() {
     const sb = getSupabase();
     if (!sb) { setLoading(false); setErr("خطأ إعداد"); return; }
 
-    // إرسال الماجيك لينك من المتصفّح مباشرة (PKCE code verifier يتخزّن صح)
     const { error } = await sb.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/complete-profile` },
     });
 
     setLoading(false);
 
     if (error) {
-      setErr(error.message.includes("rate") ? "تم تجاوز حد الإرسال. انتظر دقائق وحاول" : error.message);
+      setErr(error.message.includes("rate") ? "تم تجاوز حد الإرسال. انتظر دقائق" : error.message);
       return;
     }
-
     setSent(true);
     setMsg("تم إرسال رابط التأكيد إلى إيميلك. افتح الرسالة واضغط الرابط لإكمال التسجيل.");
   }
@@ -46,7 +44,6 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold">حساب جديد</h1>
           <p className="text-sm text-gray-500">أدخل إيميلك لبدء التسجيل</p>
         </div>
-
         {sent ? (
           <div className="text-center space-y-4">
             <div className="bg-green-50 rounded-2xl p-5 text-green-700 text-sm">{msg}</div>
@@ -66,7 +63,6 @@ export default function RegisterPage() {
             </button>
           </form>
         )}
-
         <a href="/auth/login" className="w-full text-center text-sm text-gray-500 mt-4 block">
           لديك حساب؟ <span className="text-[var(--accent)] font-bold">سجل دخول</span>
         </a>
