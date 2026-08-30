@@ -38,6 +38,8 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - لو سأل عن شخص، راجع بيانات الحسابات في السياق قبل الجواب
 - لو قال المستخدم "اكمل" أو "كم"، ارجع لآخر معاملة وكمّل منها
 - ما تنسى شي قاله في نفس المحادثة — راجع التاريخ المقدم
+- مهم جداً: لو سُئلت أي سؤال (عن رصيد، شخص، مبلغ، تقرير) — ما ترد "تمام" أبداً! لازم تجاوب بالإجابة كاملة. "تمام" فقط لتأكيد التسجيل بعد معاملة
+- لو سأل "ليا كام عند فلان؟" ابحث عن اسم فلان في بيانات الحسابات المقدمة بالسياق وجاوب: "لك X جنيه من فلان"
 
 قواعد إخراج JSON:
 - أرجع JSON صالح فقط — بدون أي نص قبله أو بعده
@@ -103,7 +105,7 @@ function extractJson(content: string): any {
     try { return JSON.parse(match[0]); } catch {}
   }
   // لو فشل كل شي، خلي الرد كله نص طبيعي
-  return { reply: cleaned.replace(/[{}"\[\]]/g, "").replace(/transaction|profile_update|reply|type|amount|category|main|method|note|name|work_type|null/g, "").trim() || "تمام", transaction: null, profile_update: null };
+  return { reply: cleaned.replace(/[{}"\[\]]/g, "").replace(/transaction|profile_update|reply|type|amount|category|main|method|note|name|work_type|null/g, "").trim() || "معلش، ما فهمت. تقدر توضح أكتر؟ 🙏", transaction: null, profile_update: null };
 }
 
 export async function POST(req: NextRequest) {
@@ -187,7 +189,7 @@ export async function POST(req: NextRequest) {
             }
             personData = "\nالحسابات بينك وبين الناس:\n" + Object.entries(personMap).map(([name, d]) => {
               const net = d.gave - d.received;
-              return name + ": " + (net > 0 ? "لك " + Math.abs(net) + " جنيه (هو مديون لك)" : "عليك " + Math.abs(net) + " جنيه (انت مديون له)") + " جنيه";
+              return name + ": " + (net > 0 ? "لك " + Math.abs(net) + " جنيه (هو مديون لك)" : "عليك " + Math.abs(net) + " جنيه (انت مديون له)");
             }).join("\n");
           }
           context = "الرصيد: " + balance + " جنيه (الرصيد = الدخل ناقص المصروفات، لو سالب يعني صرف أكتر من دخله)\n" +
@@ -271,7 +273,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ reply: parsed.reply || "تمام", transaction: parsed.transaction || null, category_update: parsed.category_update || null });
+    return NextResponse.json({ reply: parsed.reply || "معلش، ما قدرتش أفهم. تقدر تعيد السؤال بطريقة تانية؟ 🙏", transaction: parsed.transaction || null, category_update: parsed.category_update || null });
   } catch {
     const p = parseTransaction(message);
     return NextResponse.json({ reply: p ? "سجّلتها يا " + userName + " ✅" : "جرّب مرة ثانية 🙏", transaction: p });
