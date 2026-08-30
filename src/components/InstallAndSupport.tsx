@@ -84,8 +84,8 @@ export default function InstallAndSupport() {
         </div>
       )}
 
-      {/* أزرار عائمة */}
-      <div className="fixed bottom-20 left-4 z-40 flex flex-col gap-2">
+      {/* شريط أدوات علوي */}
+      <div className="fixed top-3 left-3 z-40 flex gap-2">
         {/* زر التثبيت / فتح التطبيق */}
         {installEvent && !installed && (
           <button onClick={handleInstall}
