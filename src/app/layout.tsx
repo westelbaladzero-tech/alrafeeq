@@ -2,7 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "الرفيق | الصديق الأمين",
+  title: "الرفيق الأمين",
   description: "مساعدك الذكي لإدارة مصروفاتك ودخلك",
 };
 

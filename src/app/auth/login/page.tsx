@@ -42,7 +42,7 @@ export default function LoginPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <p className="text-sm text-[var(--accent)] mb-1">مساحتك المالية الهادئة</p>
-            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">دخول الرفيق</h1>
+            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">دخول الرفيق الأمين</h1>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center">
             <Shield size={24} className="text-white" />

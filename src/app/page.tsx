@@ -23,8 +23,8 @@ export default function Home() {
       <main className="min-h-screen flex flex-col items-center">
         <header className="w-full max-w-3xl px-5 py-4 flex items-center justify-between bg-white">
           <div>
-            <div className="text-2xl font-bold">الرفيق</div>
-            <div className="text-xs text-gray-400">الصديق الأمين</div>
+            <div className="text-2xl font-bold">الرفيق الأمين</div>
+            <div className="text-xs text-gray-400">رفيقك في كل مالك</div>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[var(--soft)] flex items-center justify-center">

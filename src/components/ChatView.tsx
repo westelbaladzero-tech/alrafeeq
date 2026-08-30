@@ -62,7 +62,9 @@ export default function ChatView() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative overflow-hidden">
+      <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-[var(--soft)] opacity-30 pointer-events-none" />
+      <div className="absolute bottom-20 -left-16 w-28 h-28 rounded-full bg-[var(--soft-pink)] opacity-20 pointer-events-none" />
       <div ref={scrollRef} className="flex-1 p-4 space-y-3 overflow-auto">
         {messages.map((m, i) => (
           <div key={i} className={"flex gap-2 " + (m.role === "user" ? "justify-start" : "justify-end")}>

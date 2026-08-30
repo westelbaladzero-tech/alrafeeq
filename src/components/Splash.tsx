@@ -18,8 +18,8 @@ export default function Splash() {
             <Shield size={24} className="text-[var(--accent)]" />
           </div>
           <div className="text-right">
-            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">الرفيق</h1>
-            <p className="text-xs text-[var(--muted)]">الصديق الأمين</p>
+            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">الرفيق الأمين</h1>
+            <p className="text-xs text-[var(--muted)]">رفيقك في كل مالك</p>
           </div>
         </div>
 

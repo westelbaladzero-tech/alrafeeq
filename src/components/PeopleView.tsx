@@ -69,7 +69,7 @@ export default function PeopleView() {
   return (
     <div className="h-full overflow-auto">
       {/* ملخص الحسابات */}
-      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-5 rounded-b-3xl shadow-lg">
+      <div className="bg-gradient-to-br from-[var(--accent)] to-[var(--accent-dark)] text-white p-5 rounded-b-3xl shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Users size={22} /> الحسابات
@@ -109,7 +109,7 @@ export default function PeopleView() {
                   className="w-full flex items-center gap-3 p-4 hover:bg-gray-50/50 transition"
                 >
                   <div className={"w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-bold " +
-                    (isOwed ? "bg-green-500" : "bg-red-400")}>
+                    (isOwed ? "bg-[var(--accent)]" : "bg-red-300")}>
                     {p.name.charAt(0)}
                   </div>
                   <div className="flex-1 text-right">

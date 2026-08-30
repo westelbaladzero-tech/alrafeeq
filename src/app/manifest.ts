@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'الرفيق',
-    short_name: 'الرفيق',
-    description: 'الصديق الأمين لإدارة أموالك',
+    name: 'الرفيق الأمين',
+    short_name: 'الرفيق الأمين',
+    description: 'رفيقك في كل مالك',
     start_url: '/',
     display: 'standalone',
     background_color: '#f7f8fa',

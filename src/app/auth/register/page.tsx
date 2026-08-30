@@ -41,7 +41,7 @@ export default function RegisterPage() {
 
         <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-sm text-[var(--accent)] mb-1">انضم لرفيقك</p>
+            <p className="text-sm text-[var(--accent)] mb-1">انضم للرفيق الأمين</p>
             <h1 className="text-2xl font-bold text-[var(--accent-dark)]">حساب جديد</h1>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center">
