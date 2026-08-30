@@ -30,6 +30,9 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - ناده باسمه أحياناً
 - في حساب الرصيد: الدخل ناقص المصروفات. لو سالب قول "عليك"
 - أكمل إجاباتك دائماً — ما تقصها في النص
+- لو سأل عن شخص، راجع بيانات الحسابات في السياق قبل الجواب
+- لو قال المستخدم "اكمل" أو "كم"، ارجع لآخر معاملة وكمّل منها
+- ما تنسى شي قاله في نفس المحادثة — راجع التاريخ المقدم
 
 قواعد إخراج JSON:
 - أرجع JSON صالح فقط — بدون أي نص قبله أو بعده
@@ -49,10 +52,14 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 
 الفئات: مطاعم، مواصلات، فواتير، تسوق، صحة، تعليم، ترفيه، إيجار، راتب، أرباح، عمولة، أخرى
 
-تتبع الأشخاص:
-- لو ذكر المستخدم شخص مع مبلغ (محمد أخذ ٥٠٠، دفع أحمد ٢٠٠، استلف سعيد ١٠٠)، استخرج اسم الشخص في transaction.person
-- "أخذ/استلف/دفع له" = الشخص عليه دين للمستخدم (type: expense)
-- "دفع/رجع/سدد" = الشخص رد دينه (type: income)
+تتبع الأشخاص (مهم جداً):
+- لو ذكر المستخدم شخص مع مبلغ، استخرج اسمه كامل في transaction.person
+  مثل: "محمد هاني أخذ ٥٠٠" → person: "محمد هاني"
+  مثل: "أحمد سعد دفع ٢٠٠" → person: "أحمد سعد"
+- "أخذ/استلف/أعطيته/دفع له" = الشخص عليه دين (type: expense, category: "عمولة")
+- "دفع/رجع/سدد/رد" = الشخص رد دينه (type: income, category: "عمولة")
+- لو سأل عن شخص بالاسم، جاوبه من بيانات الحسابات المقدمة في السياق
+- لا تسجل معاملة شخص تحت فئة "أخرى" — استخدم "عمولة"
 
 أرجع JSON بهذا الشكل بالظبط:
 {"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "person": "اسم الشخص أو null", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "reply": "ردك هنا"}`;
@@ -180,7 +187,7 @@ export async function POST(req: NextRequest) {
 
   const messages: any[] = [{ role: "system", content: prompt }];
   if (history && Array.isArray(history)) {
-    for (const h of history.slice(-4)) {
+    for (const h of history.slice(-8)) {
       messages.push({ role: h.role === "bot" ? "assistant" : "user", content: h.text });
     }
   }
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + GROQ_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "openai/gpt-oss-120b", messages, temperature: 0.8, max_tokens: 600 }),
+      body: JSON.stringify({ model: "openai/gpt-oss-120b", messages, temperature: 0.8, max_tokens: 800 }),
     });
 
     const data = await res.json();

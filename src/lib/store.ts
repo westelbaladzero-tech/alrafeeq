@@ -55,6 +55,7 @@ function rowToTx(row: any): Transaction {
     main: row.main,
     method: row.method,
     note: row.note || '',
+    person: row.person || '',
     createdAt: row.created_at,
   };
 }
