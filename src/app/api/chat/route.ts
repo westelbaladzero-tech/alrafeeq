@@ -42,8 +42,13 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 
 الفئات: مطاعم، مواصلات، فواتير، تسوق، صحة، تعليم، ترفيه، إيجار، راتب، أرباح، عمولة، أخرى
 
+تتبع الأشخاص:
+- لو ذكر المستخدم شخص مع مبلغ (محمد أخذ ٥٠٠، دفع أحمد ٢٠٠، استلف سعيد ١٠٠)، استخرج اسم الشخص في transaction.person
+- "أخذ/استلف/دفع له" = الشخص عليه دين للمستخدم (type: expense)
+- "دفع/رجع/سدد" = الشخص رد دينه (type: income)
+
 أرجع JSON بهذا الشكل بالظبط:
-{"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "reply": "ردك هنا"}`;
+{"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "person": "اسم الشخص أو null", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "reply": "ردك هنا"}`;
 
 // استخراج JSON من رد النموذج بطريقة قوية
 function extractJson(content: string): any {
@@ -128,9 +133,24 @@ export async function POST(req: NextRequest) {
           const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, a]) => c + ": " + a).join("، ");
           const recent = txs.slice(0, 5).map((t: any) => (t.type === "income" ? "+ دخل" : "- مصروف") + " " + t.amount + " " + t.category).join("\n");
 
+          // بيانات الأشخاص
+          const personTxs = txs.filter((x: any) => x.person);
+          let personData = "";
+          if (personTxs.length > 0) {
+            const personMap: Record<string, { gave: number; received: number }> = {};
+            for (const t of personTxs) {
+              if (!personMap[t.person]) personMap[t.person] = { gave: 0, received: 0 };
+              if (t.type === "expense") personMap[t.person].gave += Number(t.amount);
+              else personMap[t.person].received += Number(t.amount);
+            }
+            personData = "\nالحسابات بينك وبين الناس:\n" + Object.entries(personMap).map(([name, d]) => {
+              const net = d.gave - d.received;
+              return name + ": لـ" + (net > 0 ? "ك" : "عليك") + " " + Math.abs(net) + " جنيه";
+            }).join("\n");
+          }
           context = "الرصيد: " + balance + " جنيه (الرصيد = الدخل ناقص المصروفات، لو سالب يعني صرف أكتر من دخله)\n" +
             "إجمالي الدخل: " + income + "\nإجمالي المصروفات: " + expense + "\n" +
-            "أعلى الفئات: " + (topCats || "لا يوجد") + "\nآخر المعاملات:\n" + recent;
+            "أعلى الفئات: " + (topCats || "لا يوجد") + "\nآخر المعاملات:\n" + recent + personData;
         }
       }
     } catch {}
@@ -177,6 +197,7 @@ export async function POST(req: NextRequest) {
       if (admin) await admin.from("transactions").insert({
         user_id: userId, type: t.type, amount: Number(t.amount), category: t.category || "أخرى",
         main: t.main || "personal", method: t.method || "unknown", note: t.note || message,
+        person: t.person || null,
       });
     }
 

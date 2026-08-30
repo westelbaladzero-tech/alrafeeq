@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { MessageCircle, BarChart3, Receipt, Wallet, LogOut } from "lucide-react";
 import ChatView from "@/components/ChatView";
-import DashboardView from "@/components/DashboardView";
+import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
 import AuthGate from "@/components/AuthGate";
 import { getSupabase } from "@/lib/supabase";
@@ -39,14 +39,14 @@ export default function Home() {
         <section className="w-full max-w-3xl flex-1 px-4 pb-24">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden h-[68vh] flex flex-col">
             {tab === "chat" && <ChatView />}
-            {tab === "dashboard" && <DashboardView />}
+            {tab === "dashboard" && <PeopleView />}
             {tab === "history" && <HistoryView />}
           </div>
         </section>
 
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around py-2 px-4 max-w-3xl mx-auto">
           <TabBtn active={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
-          <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<BarChart3 size={20} />} label="ملخص" />
+          <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
           <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Receipt size={20} />} label="سجل" />
         </nav>
       </main>
