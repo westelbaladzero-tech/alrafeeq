@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { MessageCircle, Users, Receipt, Wallet, LogOut } from "lucide-react";
+import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw } from "lucide-react";
 import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
@@ -22,32 +22,37 @@ export default function Home() {
   return (
     <AuthGate>
       <InstallAndSupport />
-    
-      <main className="min-h-screen flex flex-col items-center">
-        <header className="w-full max-w-3xl px-5 py-4 flex items-center justify-between bg-white">
-          <div>
-            <div className="text-2xl font-bold">الرفيق الأمين</div>
-            <div className="text-xs text-gray-400">رفيقك في كل مالك</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[var(--soft)] flex items-center justify-center">
-              <Wallet size={20} className="text-[var(--accent)]" />
+      <main className="h-screen flex flex-col bg-[var(--bg)]">
+        {/* الهيدر */}
+        <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--soft)] shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-[var(--accent)] flex items-center justify-center">
+              <Shield size={18} className="text-white" />
             </div>
-            <button onClick={handleLogout} className="text-gray-400 hover:text-red-400 p-2" title="تسجيل الخروج">
-              <LogOut size={18} />
+            <div>
+              <div className="text-lg font-bold text-[var(--accent-dark)]">الرفيق الأمين</div>
+              <div className="text-[10px] text-[var(--muted)]">رفيقك في كل مالك</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => window.location.reload()} className="w-9 h-9 rounded-xl hover:bg-[var(--soft)] flex items-center justify-center text-[var(--accent)] transition" title="إعادة تحديث">
+              <RefreshCw size={16} />
+            </button>
+            <button onClick={handleLogout} className="w-9 h-9 rounded-xl hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-400 transition" title="خروج">
+              <LogOut size={16} />
             </button>
           </div>
         </header>
 
-        <section className="w-full max-w-3xl flex-1 px-4 pb-24">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden h-[68vh] flex flex-col">
-            {tab === "chat" && <ChatView />}
-            {tab === "dashboard" && <PeopleView />}
-            {tab === "history" && <HistoryView />}
-          </div>
+        {/* المحتوى */}
+        <section className="flex-1 overflow-hidden">
+          {tab === "chat" && <ChatView />}
+          {tab === "dashboard" && <PeopleView />}
+          {tab === "history" && <HistoryView />}
         </section>
 
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around py-2 px-4 max-w-3xl mx-auto">
+        {/* التبويبات */}
+        <nav className="flex justify-around py-1.5 px-2 bg-white border-t border-[var(--soft)] shrink-0">
           <TabBtn active={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
           <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
           <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Receipt size={20} />} label="سجل" />
@@ -59,8 +64,8 @@ export default function Home() {
 
 function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 px-6 py-2 rounded-xl transition ${active ? "text-[var(--accent)]" : "text-gray-400"}`}>
-      {icon}<span className="text-xs">{label}</span>
+    <button onClick={onClick} className={"flex flex-col items-center gap-0.5 px-8 py-1.5 rounded-xl transition " + (active ? "text-[var(--accent)] font-bold" : "text-gray-400")}>
+      {icon}<span className="text-[11px]">{label}</span>
     </button>
   );
 }
