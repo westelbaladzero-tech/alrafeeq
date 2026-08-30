@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { MessageCircle, BarChart3, Receipt, Wallet, LogOut } from "lucide-react";
+import { MessageCircle, Users, Receipt, Wallet, LogOut } from "lucide-react";
 import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
