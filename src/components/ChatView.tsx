@@ -3,17 +3,37 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, UserRound, Loader2 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
-const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق — قوللي أي شي صرفته أو أي دخل وصلك وأنا أسجّله وأفكرك برصيدك.";
+const STORAGE_KEY = "alrafeeq_chat_history";
+const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق. قبل ما نبدأ، تحب أناديك بإيه؟";
 
 interface Msg { role: "bot" | "user"; text: string }
 
 export default function ChatView() {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Msg[]>([{ role: "bot", text: WELCOME }]);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // تحميل المحادثة من localStorage
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+          return;
+        }
+      }
+    } catch {}
+    setMessages([{ role: "bot", text: WELCOME }]);
+  }, []);
+
+  // حفظ المحادثة
+  useEffect(() => {
+    if (typeof window === "undefined" || messages.length === 0) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
@@ -35,7 +55,7 @@ export default function ChatView() {
         body: JSON.stringify({
           message: text,
           accessToken: session?.access_token || null,
-          history: newMsgs.slice(-5),
+          history: newMsgs.slice(-6),
         }),
       });
       const data = await res.json();
@@ -45,6 +65,10 @@ export default function ChatView() {
       setTyping(false);
       setMessages(m => [...m, { role: "bot", text: "صار خطأ بسيط، جرّب مرة ثانية 🙏" }]);
     }
+  }
+
+  if (messages.length === 0) {
+    return <div className="flex items-center justify-center h-full text-gray-400">جاري التحميل...</div>;
   }
 
   return (
