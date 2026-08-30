@@ -14,6 +14,7 @@ export interface Transaction {
   main: MainCategory;
   method: PaymentMethod;
   note: string;
+  person?: string;
   createdAt: string;
 }
 
