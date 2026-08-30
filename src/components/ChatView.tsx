@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, UserRound, Loader2 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
-const WELCOME = "أهلاً بك 👋 أنا الرفيق — الصديق الأمين. قولي أي شي صرفته أو أي دخل وصلك وأنا أتولى.";
+const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق — قوللي أي شي صرفته أو أي دخل وصلك وأنا أسجّله وأفكرك برصيدك.";
 
 interface Msg { role: "bot" | "user"; text: string }
 
@@ -20,7 +20,8 @@ export default function ChatView() {
   async function send() {
     if (!input.trim() || typing) return;
     const text = input.trim();
-    setMessages(m => [...m, { role: "user", text }]);
+    const newMsgs = [...messages, { role: "user" as const, text }];
+    setMessages(newMsgs);
     setInput("");
     setTyping(true);
 
@@ -34,11 +35,12 @@ export default function ChatView() {
         body: JSON.stringify({
           message: text,
           accessToken: session?.access_token || null,
+          history: newMsgs.slice(-5),
         }),
       });
       const data = await res.json();
       setTyping(false);
-      setMessages(m => [...m, { role: "bot", text: data.reply || "تم" }]);
+      setMessages(m => [...m, { role: "bot", text: data.reply || "تمام" }]);
     } catch {
       setTyping(false);
       setMessages(m => [...m, { role: "bot", text: "صار خطأ بسيط، جرّب مرة ثانية 🙏" }]);
