@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ reply: parsed.reply || "تمام", transaction: parsed.transaction || null });
+    return NextResponse.json({ reply: parsed.reply || "تمام", transaction: parsed.transaction || null, category_update: parsed.category_update || null });
   } catch {
     const p = parseTransaction(message);
     return NextResponse.json({ reply: p ? "سجّلتها يا " + userName + " ✅" : "جرّب مرة ثانية 🙏", transaction: p });
