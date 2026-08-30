@@ -1,12 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f7f8fa;
+  --bg: #faf9f6;
+  --bg-warm: #f5f3ee;
   --card: #fff;
-  --text: #17202a;
-  --muted: #68727d;
-  --accent: #1d7a5a;
-  --soft: #eaf5f0;
+  --text: #1a2e23;
+  --muted: #6b7d72;
+  --accent: #1a6b4f;
+  --accent-dark: #134d3a;
+  --soft: #e8f3ed;
+  --soft-pink: #fce8ed;
+  --shadow: 0 2px 12px rgba(26, 107, 79, 0.06);
+  --shadow-lg: 0 8px 32px rgba(26, 107, 79, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -16,11 +21,11 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Cairo', 'Noto Sans Arabic', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 button, input { font: inherit; }
 
-/* تمرير سلس */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-thumb { background: #d4dcd7; border-radius: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }

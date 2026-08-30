@@ -1,69 +1,96 @@
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Phone, Lock, LogIn, Wallet } from 'lucide-react';
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Phone, Lock, Shield, ArrowLeft } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState('');
-  const [pin, setPin] = useState('');
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState('');
+  const [err, setErr] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setErr('');
+    setErr("");
     setLoading(true);
 
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone, pin }),
     });
     const data = await res.json();
     setLoading(false);
 
     if (data.error) { setErr(data.error); return; }
-
-    // توجيه إلى ماجيك لينك لتأسيس الجلسة
-    if (data.redirect) {
-      window.location.href = data.redirect;
-    }
+    if (data.redirect) window.location.href = data.redirect;
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-5">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-3xl bg-[var(--soft)] flex items-center justify-center mx-auto mb-3">
-            <Wallet size={28} className="text-[var(--accent)]" />
+    <main className="min-h-screen flex flex-col p-6 relative overflow-hidden">
+      <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-[var(--soft)] opacity-60" />
+
+      <div className="relative w-full max-w-sm mx-auto flex-1 flex flex-col justify-center">
+        {/* رجوع */}
+        <button onClick={() => router.push("/")}
+          className="flex items-center gap-1 text-[var(--muted)] text-sm mb-8 self-start">
+          <ArrowLeft size={16} /> الرئيسية
+        </button>
+
+        {/* الشعار + عنوان */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <p className="text-sm text-[var(--accent)] mb-1">مساحتك المالية الهادئة</p>
+            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">دخول الرفيق</h1>
           </div>
-          <h1 className="text-2xl font-bold">الرفيق</h1>
-          <p className="text-sm text-gray-500">أهلاً بعودتك</p>
+          <div className="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center">
+            <Shield size={24} className="text-white" />
+          </div>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
-          <div className="relative">
-            <Phone size={18} className="absolute right-3 top-3.5 text-gray-300" />
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="رقم الهاتف" required
-              className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
-          </div>
-          <div className="relative">
-            <Lock size={18} className="absolute right-3 top-3.5 text-gray-300" />
-            <input type="password" value={pin} onChange={e => setPin(e.target.value)} placeholder="رمز الحماية" maxLength={8} required
-              className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
-          </div>
+        {/* بطاقة الدخول */}
+        <div className="bg-white rounded-3xl p-5 shadow-[var(--shadow-lg)] border border-[var(--soft)]">
+          <p className="text-sm text-[var(--accent)] mb-4">مرحباً بعودتك</p>
 
-          {err && <div className="text-red-500 text-sm text-center">{err}</div>}
+          <form onSubmit={submit} className="space-y-3">
+            <div>
+              <label className="text-xs text-[var(--muted)] mb-1 block">رقم الهاتف</label>
+              <div className="relative">
+                <Phone size={18} className="absolute right-3 top-3.5 text-[var(--accent)]" />
+                <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                  placeholder="01xxxxxxxxx" required
+                  className="w-full bg-[var(--bg-warm)] rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm" />
+              </div>
+            </div>
 
-          <button type="submit" disabled={loading} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 flex items-center justify-center gap-2 font-bold disabled:opacity-50">
-            <LogIn size={18} /> {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
-          </button>
-        </form>
+            <div>
+              <label className="text-xs text-[var(--muted)] mb-1 block">رمز الحماية</label>
+              <div className="relative">
+                <Lock size={18} className="absolute right-3 top-3.5 text-[var(--accent)]" />
+                <input type="password" value={pin} onChange={e => setPin(e.target.value)}
+                  placeholder="••••" maxLength={8} required
+                  className="w-full bg-[var(--bg-warm)] rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm" />
+              </div>
+            </div>
 
+            {err && <div className="text-red-500 text-sm text-center bg-red-50 rounded-xl py-2">{err}</div>}
+
+            <button type="submit" disabled={loading}
+              className="w-full rounded-2xl bg-[var(--accent)] text-white py-3.5 font-bold disabled:opacity-50 text-sm">
+              {loading ? "جاري الدخول..." : "تسجيل الدخول"}
+            </button>
+          </form>
+        </div>
+
+        {/* روابط */}
         <div className="flex justify-between mt-4 text-sm">
-          <button onClick={() => router.push('/auth/recovery')} className="text-gray-500">نسيت الرمز؟</button>
-          <button onClick={() => router.push('/auth/register')} className="text-[var(--accent)] font-bold">حساب جديد</button>
+          <button onClick={() => router.push("/auth/recovery")} className="text-[var(--muted)]">
+            نسيت الرمز؟
+          </button>
+          <button onClick={() => router.push("/auth/register")} className="text-[var(--accent)] font-bold">
+            حساب جديد
+          </button>
         </div>
       </div>
     </main>

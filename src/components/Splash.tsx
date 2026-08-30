@@ -1,35 +1,53 @@
-'use client';
-import { useRouter } from 'next/navigation';
-import { Wallet, MessageCircle, BarChart3, Shield } from 'lucide-react';
+"use client";
+import { useRouter } from "next/navigation";
+import { Shield, MessageCircle, Users, Receipt, Sparkles } from "lucide-react";
 
 export default function Splash() {
   const router = useRouter();
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm text-center">
-        <div className="w-24 h-24 rounded-3xl bg-[var(--soft)] flex items-center justify-center mx-auto mb-6">
-          <Wallet size={44} className="text-[var(--accent)]" />
+    <main className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* دائرة زخرفية */}
+      <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[var(--soft)] opacity-60" />
+      <div className="absolute top-40 -left-32 w-64 h-64 rounded-full bg-[var(--soft-pink)] opacity-50" />
+
+      <div className="relative w-full max-w-sm">
+        {/* الشعار */}
+        <div className="flex items-center gap-3 justify-center mb-8">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--soft)] flex items-center justify-center">
+            <Shield size={24} className="text-[var(--accent)]" />
+          </div>
+          <div className="text-right">
+            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">الرفيق</h1>
+            <p className="text-xs text-[var(--muted)]">الصديق الأمين</p>
+          </div>
         </div>
 
-        <h1 className="text-4xl font-bold mb-2">الرفيق</h1>
-        <p className="text-gray-500 text-lg mb-2">الصديق الأمين لإدارة أموالك</p>
-        <p className="text-gray-400 text-sm mb-10">
-          سجّل مصروفاتك ودخلك بالعربية بكل بساطة، واحصل على ملخصات وإحصائيات تساعدك تتحكّم في ميزانيتك
-        </p>
-
-        <div className="space-y-3 mb-10">
-          <Feature icon={<MessageCircle size={20} />} title="شات ذكي" desc="اكتب مصروفك بالعربية وهو يفهمه" />
-          <Feature icon={<BarChart3 size={20} />} title="ملخصات فورية" desc="رصيدك وأعلى فئاتك في لمح البصر" />
-          <Feature icon={<Shield size={20} />} title="حماية كاملة" desc="رمز حماية ومزامنة سحابية آمنة" />
+        {/* العنوان */}
+        <div className="text-center mb-8">
+          <p className="text-sm text-[var(--accent)] mb-2">مساحتك المالية الهادئة</p>
+          <h2 className="text-3xl font-bold text-[var(--accent-dark)] leading-tight mb-3">
+            ادخل، واحكِ<br />ما حدث لمالك.
+          </h2>
+          <p className="text-sm text-[var(--muted)] leading-relaxed">
+            اكتب مصروفاتك ودخلك بالعربية بكل بساطة، والرفيق يفهم ويسجّل وينصحك
+          </p>
         </div>
 
-        <button onClick={() => router.push('/auth/login')}
-          className="w-full rounded-2xl bg-[var(--accent)] text-white py-4 font-bold text-lg mb-3">
+        {/* المميزات */}
+        <div className="space-y-2 mb-8">
+          <Feature icon={<MessageCircle size={18} />} title="محاور ذكي" desc="يفهم العامية ويسجّل لك أوتوماتيك" />
+          <Feature icon={<Receipt size={18} />} title="سجل منظّم" desc="مصروفاتك بالفئات والمجاميع" />
+          <Feature icon={<Users size={18} />} title="حسابات الأشخاص" desc="تتبّع ديونك ومستحقاتك" />
+        </div>
+
+        {/* الأزرار */}
+        <button onClick={() => router.push("/auth/login")}
+          className="w-full rounded-2xl bg-[var(--accent)] text-white py-3.5 font-bold mb-3 shadow-sm">
           ابدأ الآن
         </button>
-        <button onClick={() => router.push('/auth/register')}
-          className="w-full rounded-2xl bg-gray-100 text-gray-600 py-4 font-bold">
+        <button onClick={() => router.push("/auth/register")}
+          className="w-full rounded-2xl bg-[var(--soft)] text-[var(--accent-dark)] py-3.5 font-bold">
           أنشئ حساب جديد
         </button>
       </div>
@@ -39,13 +57,13 @@ export default function Splash() {
 
 function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <div className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-gray-100">
-      <div className="w-10 h-10 rounded-full bg-[var(--soft)] flex items-center justify-center shrink-0 text-[var(--accent)]">
+    <div className="flex items-center gap-3 bg-white/70 rounded-2xl p-3 border border-[var(--soft)]">
+      <div className="w-9 h-9 rounded-full bg-[var(--soft)] flex items-center justify-center shrink-0 text-[var(--accent)]">
         {icon}
       </div>
       <div className="text-right">
-        <div className="font-bold text-sm">{title}</div>
-        <div className="text-xs text-gray-400">{desc}</div>
+        <div className="font-bold text-sm text-[var(--text)]">{title}</div>
+        <div className="text-xs text-[var(--muted)]">{desc}</div>
       </div>
     </div>
   );

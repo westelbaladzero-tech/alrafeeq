@@ -14,23 +14,18 @@ export default function ChatView() {
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // تحميل المحادثة من localStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
-          return;
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) { setMessages(parsed); return; }
       }
     } catch {}
     setMessages([{ role: "bot", text: WELCOME }]);
   }, []);
 
-  // حفظ المحادثة
   useEffect(() => {
     if (typeof window === "undefined" || messages.length === 0) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
@@ -48,15 +43,10 @@ export default function ChatView() {
     try {
       const sb = getSupabase();
       const { data: { session } } = await sb!.auth.getSession();
-
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          accessToken: session?.access_token || null,
-          history: newMsgs.slice(-6),
-        }),
+        body: JSON.stringify({ message: text, accessToken: session?.access_token || null, history: newMsgs.slice(-6) }),
       });
       const data = await res.json();
       setTyping(false);
@@ -77,43 +67,46 @@ export default function ChatView() {
         {messages.map((m, i) => (
           <div key={i} className={"flex gap-2 " + (m.role === "user" ? "justify-start" : "justify-end")}>
             {m.role === "bot" && (
-              <div className="w-9 h-9 rounded-full bg-[var(--soft)] flex items-center justify-center shrink-0">
-                <Bot size={18} />
+              <div className="w-8 h-8 rounded-full bg-[var(--soft)] flex items-center justify-center shrink-0 shadow-sm">
+                <Bot size={16} className="text-[var(--accent)]" />
               </div>
             )}
-            <div className={"max-w-[80%] rounded-2xl px-4 py-3 whitespace-pre-line " + (m.role === "user" ? "bg-gray-100" : "bg-[var(--soft)]")}>
+            <div className={"max-w-[78%] rounded-2xl px-4 py-2.5 whitespace-pre-line text-sm leading-relaxed " +
+              (m.role === "user"
+                ? "bg-[var(--accent)] text-white rounded-br-md"
+                : "bg-white text-[var(--text)] border border-[var(--soft)] rounded-bl-md shadow-sm")}>
               {m.text}
             </div>
             {m.role === "user" && (
-              <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                <UserRound size={18} />
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                <UserRound size={16} className="text-gray-400" />
               </div>
             )}
           </div>
         ))}
         {typing && (
           <div className="flex gap-2 justify-end">
-            <div className="w-9 h-9 rounded-full bg-[var(--soft)] flex items-center justify-center shrink-0">
-              <Bot size={18} />
+            <div className="w-8 h-8 rounded-full bg-[var(--soft)] flex items-center justify-center shrink-0 shadow-sm">
+              <Bot size={16} className="text-[var(--accent)]" />
             </div>
-            <div className="bg-[var(--soft)] rounded-2xl px-4 py-3 flex items-center gap-1">
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+            <div className="bg-white border border-[var(--soft)] rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1 shadow-sm">
+              <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="w-1.5 h-1.5 bg-[var(--accent)] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
             </div>
           </div>
         )}
       </div>
-      <div className="p-4 border-t bg-white">
-        <div className="flex gap-2">
+      <div className="p-3 border-t border-[var(--soft)] bg-white">
+        <div className="flex gap-2 items-end">
           <input value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && send()}
             placeholder="اكتب مصروفك أو سؤالك..."
             disabled={typing}
-            className="flex-1 bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 disabled:opacity-50" />
+            className="flex-1 bg-[var(--bg-warm)] rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm disabled:opacity-50" />
           <button onClick={send} disabled={typing || !input.trim()}
-            className="w-12 h-12 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0 disabled:opacity-50">
-            {typing ? <Loader2 size={19} className="animate-spin" /> : <Send size={19} />}
+            className="w-11 h-11 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0 disabled:opacity-50 shadow-sm">
+            {typing ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
         </div>
       </div>
