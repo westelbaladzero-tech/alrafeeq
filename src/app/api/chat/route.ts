@@ -10,43 +10,56 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - عامية مصرية مو فصحى جامدة. قول "تمام" و"يا باشا" و"حبيبي" بخفة
 - ردودك متنوعة — ما تكرر نفس الصيغة
 - إيموجي خفيف (👌😊😅💚🙏)
-- قصير بس مفيد — سطرين بالكثير
+- قصير بس مفيد
 - ذكي، تشوف الأنماط وتعلّق بدون إلحاح
 
 طريقتك في الرد:
 - مصروف: ذكر المبلغ والفئة وعلّق على الرصيد
-  مثل: "سجّلتها 👌 باقي عندك ٤٥٠" أو "٥٠ على الغداء يا {userName}. رصيدك الحين ٤٥٠"
 - دخل: بارك وذكر الرصيد الجديد
-  مثل: "وصلت 💚 رصيدك صار ٣٤٥٠"
-- سؤال عن الرصيد: جاوب مباشر
-  مثل: "عندك ٤٥٠ جنيه. لو صرفت ١٥ يومياً يكفيك لحد آخر الشهر"
-- رصيد سالب (مصروفات أكتر من دخل):
-  مثل: "صرفت أكتر من دخلك بـ ٥٠٠٠ جنيه 😬 خلينا نقلل المصروفات"
-  مهم: لو المصروفات أكبر من الدخل، قول "عليك" أو "صرفت فوق دخلك" مو "باقي عندك"
-- سؤال عن المصروفات: لخّص بوضوح
-  مثل: "صرفت ١٢٠٠ هالشهر — أكثر شي المطاعم ٦٠٠ 😅"
+- سؤال عن الرصيد: جاوب مباشر وعلّق
+- رصيد سالب (مصروفات أكتر من دخل): قول "عليك X جنيه" مو "باقي عندك"
+- سؤال عن المصروفات: لخّص بوضوح وكامل — ما تقص الإجابة
+- تقرير: اذكر الدخل والمصروفات والرصيد وأعلى الفئات — كله في رسالة كاملة
 - ما فهمت: اسأل ببساطة
-  مثل: "على إيش؟ 😄" أو "كم المبلغ؟"
 
 {onboarding}
 
-قواعد مهمة:
+قواعد مهمة جداً:
 - ما تقول "تم تسجيل" أو "تم اعتماد" — لغة روبوت
 - قول "سجّلتها" أو "تمام" بطبيعية
-- ناده باسمه أحياناً بس مو كل مرة
-- في حساب الرصيد: الدخل ناقص المصروفات. لو النتيجة سالبة قول "عليك X جنيه"
+- ناده باسمه أحياناً
+- في حساب الرصيد: الدخل ناقص المصروفات. لو سالب قول "عليك"
+- أكمل إجاباتك دائماً — ما تقصها في النص
+
+قواعد إخراج JSON:
+- أرجع JSON صالح فقط — بدون أي نص قبله أو بعده
+- بدون علامات ```json أو ```
+- الـ reply فيها النص الطبيعي بس — بدون JSON أو كود
+- لو الجواب طويل، خليه كامل في reply
 
 بيانات {userName} المالية:
 {context}
 
 الفئات: مطاعم، مواصلات، فواتير، تسوق، صحة، تعليم، ترفيه، إيجار، راتب، أرباح، عمولة، أخرى
 
-أرجع JSON فقط:
-{
-  "transaction": {"type": "expense|income", "amount": رقم, "category": "فئة", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "note": "ملاحظة"} أو null،
-  "profile_update": {"name": "الاسم"} أو {"work_type": "نوع العمل"} أو null،
-  "reply": "ردك الطبيعي بالعامية"
-}`;
+أرجع JSON بهذا الشكل بالظبط:
+{"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "reply": "ردك هنا"}`;
+
+// استخراج JSON من رد النموذج بطريقة قوية
+function extractJson(content: string): any {
+  let cleaned = content.trim();
+  // إزالة علامات markdown
+  cleaned = cleaned.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  // محاولة مباشرة
+  try { return JSON.parse(cleaned); } catch {}
+  // استخراج أول كائن JSON
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch {}
+  }
+  // لو فشل كل شي، خلي الرد كله نص طبيعي
+  return { reply: cleaned.replace(/[{}"\[\]]/g, "").replace(/transaction|profile_update|reply|type|amount|category|main|method|note|name|work_type|null/g, "").trim() || "تمام", transaction: null, profile_update: null };
+}
 
 export async function POST(req: NextRequest) {
   const { message, accessToken, history } = await req.json();
@@ -82,20 +95,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // اعداد جزء الاستقبال
   let onboarding = "";
   if (needsOnboarding) {
     if (onboardingStep === "name") {
-      onboarding = `تعليمات الاستقبال: المستخدم لسه ما قال اسمه. رحّب فيه واسأله عن اسمه. لما يرد، استخرج الاسم وحطه في profile_update.name`;
+      onboarding = "تعليمات الاستقبال: المستخدم لسه ما قال اسمه. رحّب واسأله عن اسمه. لما يرد استخرج الاسم في profile_update.name";
     } else if (onboardingStep === "work_type") {
-      onboarding = `تعليمات الاستقبال: المستخدم اسمه ${userName} لكن ما قُلنا نوع شغله. اسأله "وبتشتغل إيه يا ${userName}؟". لما يرد، استخرج نوع الشغل وحطه في profile_update.work_type. وبعدها اقترح فئات تناسب شغله`;
+      onboarding = `تعليمات الاستقبال: المستخدم اسمه ${userName}. اسأله "وبتشتغل إيه يا ${userName}؟". لما يرد استخرج نوع الشغل في profile_update.work_type واقترح فئات تناسبه`;
     }
   } else {
     onboarding = `نوع شغل المستخدم: ${userWorkType || "غير محدد"}`;
   }
 
   // اجلب الإحصائيات
-  let context = "لا توجد بيانات بعد — هذا مستخدم جديد";
+  let context = "لا توجد بيانات بعد — مستخدم جديد";
   if (userId) {
     try {
       const admin = getAdminClient();
@@ -113,11 +125,10 @@ export async function POST(req: NextRequest) {
           for (const t of txs.filter((x: any) => x.type === "expense")) {
             byCat[t.category] = (byCat[t.category] || 0) + Number(t.amount);
           }
-          const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, a]) => c + ": " + a).join("، ");
+          const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, a]) => c + ": " + a).join("، ");
           const recent = txs.slice(0, 5).map((t: any) => (t.type === "income" ? "+ دخل" : "- مصروف") + " " + t.amount + " " + t.category).join("\n");
 
-          context = "الرصيد: " + balance + " جنيه\n" +
-            "ملاحظة مهمة: الرصيد = الدخل ناقص المصروفات. لو الرقم سالب يعني المستخدم صرف أكتر من دخله\n" +
+          context = "الرصيد: " + balance + " جنيه (الرصيد = الدخل ناقص المصروفات، لو سالب يعني صرف أكتر من دخله)\n" +
             "إجمالي الدخل: " + income + "\nإجمالي المصروفات: " + expense + "\n" +
             "أعلى الفئات: " + (topCats || "لا يوجد") + "\nآخر المعاملات:\n" + recent;
         }
@@ -135,7 +146,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: p ? "سجّلتها يا " + userName + " 👌" : "جرّب: صرفت ٥٠ على غداء", transaction: p });
   }
 
-  // بناء البرومبت
   const prompt = SYSTEM_PROMPT
     .replace(/\{userName\}/g, userName)
     .replace("{context}", context)
@@ -153,13 +163,12 @@ export async function POST(req: NextRequest) {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + GROQ_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "openai/gpt-oss-120b", messages, temperature: 0.8, max_tokens: 300 }),
+      body: JSON.stringify({ model: "openai/gpt-oss-120b", messages, temperature: 0.8, max_tokens: 600 }),
     });
 
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content || "{}";
-    let parsed: any;
-    try { parsed = JSON.parse(content); } catch { parsed = { reply: content, transaction: null }; }
+    const parsed = extractJson(content);
 
     // احفظ المعاملة
     if (parsed.transaction && userId) {
@@ -171,16 +180,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // حدّث الملف الشخصي (اسم أو نوع شغل)
+    // حدّث الملف الشخصي
     if (parsed.profile_update && userId) {
       const admin = getAdminClient();
       if (admin) {
         const update: any = {};
         if (parsed.profile_update.name) update.name = parsed.profile_update.name;
         if (parsed.profile_update.work_type) update.work_type = parsed.profile_update.work_type;
-        if (Object.keys(update).length > 0) {
-          await admin.from("profiles").update(update).eq("id", userId);
-        }
+        if (Object.keys(update).length > 0) await admin.from("profiles").update(update).eq("id", userId);
       }
     }
 
