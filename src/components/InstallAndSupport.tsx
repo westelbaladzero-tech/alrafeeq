@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Download, MessageCircle, X } from "lucide-react";
+import { Download, MessageCircle, X, RefreshCw } from "lucide-react";
 
-const WHATSAPP_NUMBER = "201000000000"; // ضع رقمك هنا
+const WHATSAPP_NUMBER = "201050909821"; // ضع رقمك هنا
 
 export default function InstallAndSupport() {
   const [installEvent, setInstallEvent] = useState<any>(null);
@@ -94,6 +94,13 @@ export default function InstallAndSupport() {
             <Download size={20} />
           </button>
         )}
+
+        {/* زر إعادة التحديث */}
+        <button onClick={() => window.location.reload()}
+          className="w-12 h-12 rounded-full bg-[var(--accent-dark)] text-white flex items-center justify-center shadow-lg active:scale-90 transition"
+          title="إعادة تحديث">
+          <RefreshCw size={20} />
+        </button>
 
         {/* زر الواتساب */}
         <button onClick={openWhatsApp}
