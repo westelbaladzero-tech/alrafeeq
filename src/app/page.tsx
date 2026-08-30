@@ -21,28 +21,30 @@ export default function Home() {
 
   return (
     <AuthGate>
-      <InstallAndSupport />
       <main className="h-screen flex flex-col bg-[var(--bg)]">
         {/* الهيدر */}
-        <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-[var(--soft)] shrink-0">
+        <header className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[var(--soft)] shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-[var(--accent)] flex items-center justify-center">
-              <Shield size={18} className="text-white" />
+            <div className="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center">
+              <Shield size={16} className="text-white" />
             </div>
             <div>
-              <div className="text-lg font-bold text-[var(--accent-dark)]">الرفيق الأمين</div>
-              <div className="text-[10px] text-[var(--muted)]">رفيقك في كل مالك</div>
+              <div className="text-base font-bold text-[var(--accent-dark)] leading-tight">الرفيق الأمين</div>
+              <div className="text-[9px] text-[var(--muted)]">رفيقك في كل مالك</div>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => window.location.reload()} className="w-9 h-9 rounded-xl hover:bg-[var(--soft)] flex items-center justify-center text-[var(--accent)] transition" title="إعادة تحديث">
-              <RefreshCw size={16} />
+            <button onClick={() => window.location.reload()} className="w-8 h-8 rounded-lg hover:bg-[var(--soft)] flex items-center justify-center text-[var(--accent)] transition" title="تحديث">
+              <RefreshCw size={15} />
             </button>
-            <button onClick={handleLogout} className="w-9 h-9 rounded-xl hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-400 transition" title="خروج">
-              <LogOut size={16} />
+            <button onClick={handleLogout} className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-400 transition" title="خروج">
+              <LogOut size={15} />
             </button>
           </div>
         </header>
+
+        {/* بانر التثبيت + شريط أدوات */}
+        <InstallAndSupport />
 
         {/* المحتوى */}
         <section className="flex-1 overflow-hidden">
