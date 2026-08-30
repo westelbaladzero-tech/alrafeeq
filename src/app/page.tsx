@@ -5,6 +5,7 @@ import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
 import AuthGate from "@/components/AuthGate";
+import InstallAndSupport from "@/components/InstallAndSupport";
 import { getSupabase } from "@/lib/supabase";
 
 type Tab = "chat" | "dashboard" | "history";
@@ -20,6 +21,8 @@ export default function Home() {
 
   return (
     <AuthGate>
+      <InstallAndSupport />
+    
       <main className="min-h-screen flex flex-col items-center">
         <header className="w-full max-w-3xl px-5 py-4 flex items-center justify-between bg-white">
           <div>
