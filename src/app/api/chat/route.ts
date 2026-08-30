@@ -50,7 +50,14 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - "تحويل/بنك/حساب" → bank
 - لو ما ذكر → unknown
 
-الفئات: مطاعم، مواصلات، فواتير، تسوق، صحة، تعليم، ترفيه، إيجار، راتب، أرباح، عمولة، أخرى
+الفئات الأساسية: مطاعم، مواصلات، فواتير، تسوق، صحة، تعليم، ترفيه، إيجار، راتب، أرباح، عمولة، أخرى
+فئات المستخدم المخصصة: {customCats}
+
+إدارة الفئات:
+- لو طلب المستخدم إضافة فئة جديدة (مثل "أضف فئة قهوة")، استخدم category_update: {"action": "add", "category": "قهوة"}
+- لو طلب حذف فئة (مثل "احذف فئة ترفيه")، استخدم category_update: {"action": "delete", "category": "ترفيه"}
+- بعد الإضافة/الحذف، أكد للمستخدم بالعامية
+- استخدم الفئات المخصصة في المعاملات لو ناسبت
 
 تتبع الأشخاص (مهم جداً):
 - لو ذكر المستخدم شخص مع مبلغ، استخرج اسمه كامل في transaction.person
@@ -62,7 +69,7 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - لا تسجل معاملة شخص تحت فئة "أخرى" — استخدم "عمولة"
 
 أرجع JSON بهذا الشكل بالظبط:
-{"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "person": "اسم الشخص أو null", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "reply": "ردك هنا"}`;
+{"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "person": "اسم الشخص أو null", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "category_update": {"action": "add|delete", "category": ""} أو null، "reply": "ردك هنا"}`;
 
 // استخراج JSON من رد النموذج بطريقة قوية
 function extractJson(content: string): any {
@@ -98,6 +105,7 @@ export async function POST(req: NextRequest) {
   // اجلب الملف الشخصي
   let userName = userEmail ? userEmail.split("@")[0].split(".")[0] : "صاحبي";
   let userWorkType = "";
+  let customCats: string[] = [];
   let needsOnboarding = false;
   let onboardingStep = "";
 
@@ -108,6 +116,7 @@ export async function POST(req: NextRequest) {
       if (profile) {
         if (profile.name) userName = profile.name;
         if (profile.work_type) userWorkType = profile.work_type;
+        if (profile.custom_categories) customCats = profile.custom_categories;
         if (!profile.name) { needsOnboarding = true; onboardingStep = "name"; }
         else if (!profile.work_type) { needsOnboarding = true; onboardingStep = "work_type"; }
       }
@@ -183,6 +192,7 @@ export async function POST(req: NextRequest) {
   const prompt = SYSTEM_PROMPT
     .replace(/\{userName\}/g, userName)
     .replace("{context}", context)
+    .replace("{customCats}", customCats.length > 0 ? customCats.join("، ") : "لا توجد بعد")
     .replace("{onboarding}", onboarding);
 
   const messages: any[] = [{ role: "system", content: prompt }];
@@ -223,6 +233,22 @@ export async function POST(req: NextRequest) {
         if (parsed.profile_update.name) update.name = parsed.profile_update.name;
         if (parsed.profile_update.work_type) update.work_type = parsed.profile_update.work_type;
         if (Object.keys(update).length > 0) await admin.from("profiles").update(update).eq("id", userId);
+      }
+    }
+
+    // إدارة الفئات المخصصة
+    if (parsed.category_update && userId) {
+      const admin = getAdminClient();
+      if (admin) {
+        const cat = parsed.category_update.category;
+        const action = parsed.category_update.action;
+        if (cat && (action === "add" || action === "delete")) {
+          const { data: prof } = await admin.from("profiles").select("custom_categories").eq("id", userId).maybeSingle();
+          let cats: string[] = prof?.custom_categories || [];
+          if (action === "add" && !cats.includes(cat)) cats.push(cat);
+          if (action === "delete") cats = cats.filter((c: string) => c !== cat);
+          await admin.from("profiles").update({ custom_categories: cats }).eq("id", userId);
+        }
       }
     }
 
