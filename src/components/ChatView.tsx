@@ -1,10 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, UserRound, Loader2 } from "lucide-react";
+import { Send, Bot, UserRound, Loader2, Mic, MicOff } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "alrafeeq_chat_history";
-const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق. قبل ما نبدأ، تحب أناديك بإيه؟";
+const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. قبل ما نبدأ، تحب أناديك بإيه؟";
 
 interface Msg { role: "bot" | "user"; text: string }
 
@@ -12,7 +12,32 @@ export default function ChatView() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [typing, setTyping] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [micSupported, setMicSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // فحص دعم الميكرفون
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR) {
+      setMicSupported(true);
+      const rec = new SR();
+      rec.lang = "ar-EG";
+      rec.continuous = false;
+      rec.interimResults = true;
+      rec.onresult = (e: any) => {
+        let text = "";
+        for (let i = 0; i < e.results.length; i++) {
+          text += e.results[i][0].transcript;
+        }
+        setInput(text);
+      };
+      rec.onend = () => setListening(false);
+      rec.onerror = () => setListening(false);
+      recognitionRef.current = rec;
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -32,6 +57,20 @@ export default function ChatView() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
+  function toggleMic() {
+    if (!recognitionRef.current) return;
+    if (listening) {
+      recognitionRef.current.stop();
+      setListening(false);
+    } else {
+      setInput("");
+      try {
+        recognitionRef.current.start();
+        setListening(true);
+      } catch {}
+    }
+  }
+
   async function send() {
     if (!input.trim() || typing) return;
     const text = input.trim();
@@ -46,7 +85,7 @@ export default function ChatView() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, accessToken: session?.access_token || null, history: newMsgs.slice(-6) }),
+        body: JSON.stringify({ message: text, accessToken: session?.access_token || null, history: newMsgs.slice(-8) }),
       });
       const data = await res.json();
       setTyping(false);
@@ -65,7 +104,8 @@ export default function ChatView() {
     <div className="flex flex-col h-full relative overflow-hidden">
       <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-[var(--soft)] opacity-30 pointer-events-none" />
       <div className="absolute bottom-20 -left-16 w-28 h-28 rounded-full bg-[var(--soft-pink)] opacity-20 pointer-events-none" />
-      <div ref={scrollRef} className="flex-1 p-4 space-y-3 overflow-auto">
+
+      <div ref={scrollRef} className="flex-1 p-4 space-y-3 overflow-auto relative">
         {messages.map((m, i) => (
           <div key={i} className={"flex gap-2 " + (m.role === "user" ? "justify-start" : "justify-end")}>
             {m.role === "bot" && (
@@ -99,11 +139,22 @@ export default function ChatView() {
           </div>
         )}
       </div>
-      <div className="p-3 border-t border-[var(--soft)] bg-white">
+
+      <div className="p-3 border-t border-[var(--soft)] bg-white relative z-10">
         <div className="flex gap-2 items-end">
+          {/* زر الميكرفون */}
+          {micSupported && (
+            <button onClick={toggleMic}
+              className={"w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition " +
+                (listening
+                  ? "bg-red-500 text-white animate-pulse"
+                  : "bg-[var(--soft)] text-[var(--accent)]")}>
+              {listening ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+          )}
           <input value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && send()}
-            placeholder="اكتب مصروفك أو سؤالك..."
+            placeholder={listening ? "استمع..." : "اكتب أو انطق مصروفك..."}
             disabled={typing}
             className="flex-1 bg-[var(--bg-warm)] rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm disabled:opacity-50" />
           <button onClick={send} disabled={typing || !input.trim()}
