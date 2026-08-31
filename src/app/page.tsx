@@ -1,14 +1,15 @@
 "use client";
 import { useState } from "react";
-import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw } from "lucide-react";
+import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw, Mic } from "lucide-react";
 import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
+import MicLabView from "@/components/MicLabView";
 import AuthGate from "@/components/AuthGate";
 import InstallAndSupport from "@/components/InstallAndSupport";
 import { getSupabase } from "@/lib/supabase";
 
-type Tab = "chat" | "dashboard" | "history";
+type Tab = "chat" | "dashboard" | "history" | "mic";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
@@ -51,6 +52,7 @@ export default function Home() {
           {tab === "chat" && <ChatView />}
           {tab === "dashboard" && <PeopleView />}
           {tab === "history" && <HistoryView />}
+          {tab === "mic" && <MicLabView />}
         </section>
 
         {/* التبويبات */}
@@ -58,6 +60,7 @@ export default function Home() {
           <TabBtn active={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
           <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
           <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Receipt size={20} />} label="سجل" />
+          <TabBtn active={tab === "mic"} onClick={() => setTab("mic")} icon={<Mic size={20} />} label="ميكروفون" />
         </nav>
       </main>
     </AuthGate>
