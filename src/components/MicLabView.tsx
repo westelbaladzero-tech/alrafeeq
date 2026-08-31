@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Mic, Square, Volume2 } from "lucide-react";
+import { Loader2, Mic, Send, Square, Volume2 } from "lucide-react";
 
 type UploadResult = {
   ok: boolean;
@@ -18,6 +18,7 @@ export default function MicLabView() {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("جاهز لاختبار الميكروفون بشكل مستقل.");
   const [audioUrl, setAudioUrl] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -25,12 +26,14 @@ export default function MicLabView() {
 
   const canStart = useMemo(() => supported && !recording && !uploading, [supported, recording, uploading]);
   const canStop = useMemo(() => recording && !uploading, [recording, uploading]);
+  const canUpload = useMemo(() => !!audioBlob && !recording && !uploading, [audioBlob, recording, uploading]);
 
   async function startRecording() {
     if (!canStart) return;
 
     try {
       setResult(null);
+      setAudioBlob(null);
       setStatus("نطلب إذن الميكروفون الآن...");
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -50,14 +53,15 @@ export default function MicLabView() {
         }
       };
 
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         const nextUrl = URL.createObjectURL(blob);
+        setAudioBlob(blob);
         setAudioUrl((current) => {
           if (current) URL.revokeObjectURL(current);
           return nextUrl;
         });
-        await uploadRecording(blob);
+        setStatus("تم حفظ التسجيل. استمع له أولًا، ثم اضغط زر الإرسال للتفريغ.");
         cleanupStream();
       };
 
@@ -74,13 +78,14 @@ export default function MicLabView() {
   function stopRecording() {
     if (!canStop || !mediaRecorderRef.current) return;
     setRecording(false);
-    setStatus("أوقفنا التسجيل، ونرسل الملف الآن للمسار التجريبي...");
+    setStatus("أوقفنا التسجيل ونجهز المعاينة الآن...");
     mediaRecorderRef.current.stop();
   }
 
   async function uploadRecording(blob: Blob) {
     setUploading(true);
     setResult(null);
+    setStatus("نرسل التسجيل الآن إلى مسار التفريغ...");
 
     try {
       const formData = new FormData();
@@ -103,6 +108,11 @@ export default function MicLabView() {
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleUpload() {
+    if (!audioBlob || uploading || recording) return;
+    await uploadRecording(audioBlob);
   }
 
   function cleanupStream() {
@@ -135,22 +145,30 @@ export default function MicLabView() {
             </div>
           )}
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               onClick={startRecording}
               disabled={!canStart}
-              className="flex-1 rounded-2xl bg-[var(--accent)] text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="rounded-2xl bg-[var(--accent)] text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Mic size={18} />
-              ابدأ الاختبار
+              ابدأ التسجيل
             </button>
             <button
               onClick={stopRecording}
               disabled={!canStop}
-              className="flex-1 rounded-2xl bg-red-500 text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="rounded-2xl bg-red-500 text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Square size={18} />
               أوقف التسجيل
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={!canUpload}
+              className="rounded-2xl bg-emerald-600 text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Send size={18} />
+              أرسل للتفريغ
             </button>
           </div>
         </div>
