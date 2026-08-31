@@ -8,6 +8,7 @@ type UploadResult = {
   bytes?: number;
   mimeType?: string;
   message?: string;
+  transcript?: string;
   error?: string;
 };
 
@@ -178,10 +179,16 @@ export default function MicLabView() {
               {typeof result.bytes === "number" && <div>الحجم: {result.bytes} بايت</div>}
               {result.mimeType && <div>النوع: {result.mimeType}</div>}
               {result.message && <div>الرسالة: {result.message}</div>}
+              {result.transcript && (
+                <div className="mt-3 rounded-2xl bg-[var(--bg-warm)] px-4 py-3 leading-7 text-[var(--text)]">
+                  <div className="font-bold text-[var(--accent-dark)] mb-1">النص المفرغ</div>
+                  <div>{result.transcript}</div>
+                </div>
+              )}
               {result.error && <div className="text-red-600">{result.error}</div>}
             </div>
           ) : (
-            <div className="text-sm text-[var(--muted)]">بعد أول تسجيل سترى هنا هل وصل الملف للمسار المنفصل بنجاح.</div>
+            <div className="text-sm text-[var(--muted)]">بعد أول تسجيل سترى هنا هل وصل الملف للمسار المنفصل وهل تم تفريغه إلى نص.</div>
           )}
         </div>
       </div>
