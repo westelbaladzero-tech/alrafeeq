@@ -16,27 +16,53 @@ export default function ChatView() {
   const [micSupported, setMicSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const finalTranscriptRef = useRef("");
 
   // فحص دعم الميكرفون
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SR) {
-      setMicSupported(true);
-      const rec = new SR();
-      rec.lang = "ar-EG";
-      rec.continuous = false;
-      rec.interimResults = true;
-      rec.onresult = (e: any) => {
-        let text = "";
-        for (let i = 0; i < e.results.length; i++) {
-          text += e.results[i][0].transcript;
-        }
-        setInput(text);
-      };
-      rec.onend = () => setListening(false);
-      rec.onerror = () => setListening(false);
-      recognitionRef.current = rec;
-    }
+    if (!SR) return;
+
+    setMicSupported(true);
+    const rec = new SR();
+    rec.lang = "ar-EG";
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      finalTranscriptRef.current = "";
+      setListening(true);
+    };
+
+    rec.onresult = (e: any) => {
+      let finalText = finalTranscriptRef.current;
+      let interimText = "";
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i]?.[0]?.transcript?.trim() || "";
+        if (!transcript) continue;
+        if (e.results[i].isFinal) finalText += (finalText ? " " : "") + transcript;
+        else interimText += (interimText ? " " : "") + transcript;
+      }
+
+      finalTranscriptRef.current = finalText;
+      const nextText = (finalText || interimText).trim();
+      if (nextText) setInput(nextText);
+    };
+
+    rec.onend = () => {
+      setListening(false);
+      const finalText = finalTranscriptRef.current.trim();
+      if (finalText) setInput(finalText);
+    };
+
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+
+    return () => {
+      try { rec.stop(); } catch {}
+    };
   }, []);
 
   useEffect(() => {
@@ -60,15 +86,16 @@ export default function ChatView() {
   function toggleMic() {
     if (!recognitionRef.current) return;
     if (listening) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch {}
       setListening(false);
-    } else {
-      setInput("");
-      try {
-        recognitionRef.current.start();
-        setListening(true);
-      } catch {}
+      return;
     }
+
+    finalTranscriptRef.current = "";
+    setInput("");
+    try {
+      recognitionRef.current.start();
+    } catch {}
   }
 
   async function send() {
