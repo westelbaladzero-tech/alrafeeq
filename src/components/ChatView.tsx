@@ -8,6 +8,51 @@ const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. 
 
 interface Msg { role: "bot" | "user"; text: string }
 
+function getLocalMessages(): Msg[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function getCloudMessages(): Promise<Msg[] | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data: userData } = await sb.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) return null;
+
+  const { data, error } = await sb
+    .from("chat_messages")
+    .select("role,text,created_at")
+    .eq("user_id", uid)
+    .order("created_at", { ascending: true });
+
+  if (error || !data) return null;
+  return data.map((row: any) => ({ role: row.role, text: row.text }));
+}
+
+async function saveCloudMessage(msg: Msg) {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { data: userData } = await sb.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) return false;
+
+  const { error } = await (sb.from("chat_messages") as any).insert({
+    user_id: uid,
+    role: msg.role,
+    text: msg.text,
+  });
+
+  return !error;
+}
+
 export default function ChatView() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -66,15 +111,31 @@ export default function ChatView() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) { setMessages(parsed); return; }
+    let cancelled = false;
+
+    async function loadMessages() {
+      const cloudMessages = await getCloudMessages();
+      if (cancelled) return;
+
+      if (cloudMessages && cloudMessages.length > 0) {
+        setMessages(cloudMessages);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudMessages));
+        }
+        return;
       }
-    } catch {}
-    setMessages([{ role: "bot", text: WELCOME }]);
+
+      const localMessages = getLocalMessages();
+      if (localMessages.length > 0) {
+        setMessages(localMessages);
+        return;
+      }
+
+      setMessages([{ role: "bot", text: WELCOME }]);
+    }
+
+    loadMessages();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -101,25 +162,32 @@ export default function ChatView() {
   async function send() {
     if (!input.trim() || typing) return;
     const text = input.trim();
-    const newMsgs = [...messages, { role: "user" as const, text }];
+    const userMsg = { role: "user" as const, text };
+    const newMsgs = [...messages, userMsg];
     setMessages(newMsgs);
     setInput("");
     setTyping(true);
+    await saveCloudMessage(userMsg);
 
     try {
       const sb = getSupabase();
-      const { data: { session } } = await sb!.auth.getSession();
+      const sessionRes = sb ? await sb.auth.getSession() : null;
+      const session = sessionRes?.data?.session || null;
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, accessToken: session?.access_token || null, history: newMsgs.slice(-8) }),
       });
       const data = await res.json();
+      const botMsg = { role: "bot" as const, text: data.reply || "تمام" };
       setTyping(false);
-      setMessages(m => [...m, { role: "bot", text: data.reply || "تمام" }]);
+      setMessages(m => [...m, botMsg]);
+      await saveCloudMessage(botMsg);
     } catch {
+      const botMsg = { role: "bot" as const, text: "صار خطأ بسيط، جرّب مرة ثانية 🙏" };
       setTyping(false);
-      setMessages(m => [...m, { role: "bot", text: "صار خطأ بسيط، جرّب مرة ثانية 🙏" }]);
+      setMessages(m => [...m, botMsg]);
+      await saveCloudMessage(botMsg);
     }
   }
 
