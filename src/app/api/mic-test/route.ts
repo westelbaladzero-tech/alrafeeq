@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
-const GEMINI_MODEL = "gemini-2.0-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 function extractTranscript(payload: any): string {
-  const parts = payload?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) return "";
-  return parts.map((p: any) => p?.text || "").join("").trim();
+  if (payload?.output_text) return payload.output_text;
+  const steps = payload?.steps;
+  if (!Array.isArray(steps)) return "";
+  const texts: string[] = [];
+  for (const step of steps) {
+    const content = step?.content;
+    if (!Array.isArray(content)) continue;
+    for (const item of content) {
+      if (item?.text) texts.push(item.text);
+    }
+  }
+  return texts.join("").trim();
 }
 
 export async function POST(req: Request) {
@@ -41,25 +50,18 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        contents: [
+        model: GEMINI_MODEL,
+        input: [
           {
-            parts: [
-              {
-                text: "فرّغ الكلام المسموع في هذا التسجيل إلى نص عربي واضح فقط، بدون شرح إضافي، وبدون ترجمة، وبدون مقدمة.",
-              },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Audio,
-                },
-              },
-            ],
+            type: "text",
+            text: "فرّغ الكلام المسموع في هذا التسجيل إلى نص عربي واضح فقط، بدون شرح إضافي، وبدون ترجمة، وبدون مقدمة.",
+          },
+          {
+            type: "audio",
+            data: base64Audio,
+            mime_type: mimeType,
           },
         ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 2048,
-        },
       }),
     });
 
