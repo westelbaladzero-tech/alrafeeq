@@ -15,7 +15,6 @@ const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
 function verifyAdmin(req: Request): boolean {
   const token = req.headers.get("cookie") || "";
   const match = token.match(/admin_session=([^;]+)/);
@@ -59,11 +58,21 @@ async function testGroq(): Promise<{ ok: boolean; latency: number; error?: strin
   }
 }
 
-function testSMTP(): { ok: boolean; latency: number; error?: string } {
+async function testSMTP(): Promise<{ ok: boolean; latency: number; error?: string }> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { ok: false, latency: 0, error: "إعدادات Supabase غير مكتملة" };
   }
-  return { ok: true, latency: 0 };
+  const start = Date.now();
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      headers: { apikey: SUPABASE_ANON_KEY },
+    });
+    const latency = Date.now() - start;
+    if (res.ok) return { ok: true, latency };
+    return { ok: false, latency, error: `Supabase Auth: HTTP ${res.status}` };
+  } catch {
+    return { ok: false, latency: Date.now() - start, error: "فشل الاتصال بـ Supabase Auth" };
+  }
 }
 
 async function testSupabase(): Promise<{ ok: boolean; latency: number; error?: string }> {
@@ -88,7 +97,7 @@ export async function GET(req: Request) {
   const [gemini, groq, smtp, supabase, today, month] = await Promise.all([
     testGemini(),
     testGroq(),
-    Promise.resolve(testSMTP()),
+    testSMTP(),
     testSupabase(),
     getTodayUsage(),
     getMonthUsage(),
