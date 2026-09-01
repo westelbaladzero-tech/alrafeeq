@@ -357,20 +357,7 @@ export default function ChatView() {
           </div>
         )}
 
-        <div className="flex gap-1 items-end">
-          {/* زر الميكرفون */}
-          {micSupported && (
-            <button onClick={toggleMic}
-              disabled={transcribing || typing}
-              className={"w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 transition disabled:opacity-50 " +
-                (recording
-                  ? "bg-red-500 text-white animate-pulse"
-                  : transcribing
-                    ? "bg-violet-500 text-white"
-                    : "bg-[var(--soft)] text-[var(--accent)]")}>
-              {transcribing ? <Loader2 size={18} className="animate-spin" /> : recording ? <MicOff size={18} /> : <Mic size={18} />}
-            </button>
-          )}
+        <div className="flex gap-1 mb-1">
           {/* زر رفع ملف */}
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -387,6 +374,21 @@ export default function ChatView() {
           >
             <Camera size={18} />
           </button>
+        </div>
+        <div className="flex gap-1 items-end">
+          {/* زر الميكرفون */}
+          {micSupported && (
+            <button onClick={toggleMic}
+              disabled={transcribing || typing}
+              className={"w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 transition disabled:opacity-50 " +
+                (recording
+                  ? "bg-red-500 text-white animate-pulse"
+                  : transcribing
+                    ? "bg-violet-500 text-white"
+                    : "bg-[var(--soft)] text-[var(--accent)]")}>
+              {transcribing ? <Loader2 size={18} className="animate-spin" /> : recording ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+          )}
           <input value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && send()}
             placeholder={recording ? "تسجيل... اضغط لإيقاف" : transcribing ? "نفريغ الصوت..." : analyzingImage ? "بنحلل الفاتورة..." : pendingImage ? "أضف ملاحظة أو أرسل مباشرة..." : "اكتب أو انطق مصروفك..."}
