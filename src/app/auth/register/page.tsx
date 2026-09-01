@@ -79,7 +79,8 @@ export default function RegisterPage() {
                 <Mail size={18} className="absolute right-3 top-3.5 text-[var(--accent)]" />
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="email@example.com" required
-                  className="w-full bg-[var(--bg-warm)] rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm" />
+                  dir="ltr" lang="en" inputMode="email"
+                  className="w-full bg-[var(--bg-warm)] rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm text-left" />
               </div>
             </div>
 

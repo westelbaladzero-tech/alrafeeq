@@ -52,8 +52,9 @@ export default function RecoveryPage() {
           <form onSubmit={submit} className="space-y-3">
             <div className="relative">
               <Mail size={18} className="absolute right-3 top-3.5 text-gray-300" />
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="الإيميل" required
-                className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" required
+                dir="ltr" lang="en" inputMode="email"
+                className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-left" />
             </div>
             {err && <div className="text-red-500 text-sm text-center">{err}</div>}
             <button type="submit" disabled={loading}
