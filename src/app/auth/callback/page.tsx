@@ -20,14 +20,30 @@ function CallbackInner() {
         if (error || !data.user) { router.replace("/auth/login"); return; }
         user = data.user;
       } else {
-        // بعض روابط Supabase ترجع الجلسة في hash (#access_token) بدل ?code
-        await new Promise(r => setTimeout(r, 700));
+        // بعض روابط Supabase ترجع access_token/refresh_token داخل hash
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const accessToken = hash.get("access_token");
+        const refreshToken = hash.get("refresh_token");
+
+        if (accessToken && refreshToken) {
+          const { error } = await sb.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) { router.replace("/auth/login"); return; }
+
+          // نظّف الرابط بعد تثبيت الجلسة
+          window.history.replaceState({}, document.title, "/auth/callback");
+        }
+
+        const { data: sessionData } = await sb.auth.getSession();
+        if (!sessionData.session) { router.replace("/auth/login"); return; }
+
         const { data } = await sb.auth.getUser();
         if (!data.user) { router.replace("/auth/login"); return; }
         user = data.user;
       }
 
-      // تحقق: هل الملف الشخصي موجود؟
       const { data: profile } = await sb
         .from("profiles").select("id").eq("id", user.id).maybeSingle();
 
