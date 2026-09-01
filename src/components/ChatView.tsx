@@ -53,6 +53,23 @@ async function saveCloudMessage(msg: Msg) {
   return !error;
 }
 
+async function saveCloudMessages(msgs: Msg[]) {
+  const sb = getSupabase();
+  if (!sb || msgs.length === 0) return false;
+  const { data: userData } = await sb.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) return false;
+
+  const rows = msgs.map((msg) => ({
+    user_id: uid,
+    role: msg.role,
+    text: msg.text,
+  }));
+
+  const { error } = await (sb.from("chat_messages") as any).insert(rows);
+  return !error;
+}
+
 export default function ChatView() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -128,10 +145,13 @@ export default function ChatView() {
       const localMessages = getLocalMessages();
       if (localMessages.length > 0) {
         setMessages(localMessages);
+        await saveCloudMessages(localMessages);
         return;
       }
 
-      setMessages([{ role: "bot", text: WELCOME }]);
+      const welcomeMessages = [{ role: "bot" as const, text: WELCOME }];
+      setMessages(welcomeMessages);
+      await saveCloudMessages(welcomeMessages);
     }
 
     loadMessages();
