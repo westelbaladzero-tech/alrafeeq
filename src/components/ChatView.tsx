@@ -8,6 +8,15 @@ const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. 
 
 interface Msg { role: "bot" | "user"; text: string }
 
+async function transcribeAudio(blob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("audio", blob, `chat-mic-${Date.now()}.webm`);
+  const res = await fetch("/api/mic-test", { method: "POST", body: formData });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data?.error || "فشل تفريغ الصوت");
+  return data.transcript || "";
+}
+
 function getLocalMessages(): Msg[] {
   if (typeof window === "undefined") return [];
   try {
@@ -74,56 +83,18 @@ export default function ChatView() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [typing, setTyping] = useState(false);
-  const [listening, setListening] = useState(false);
-  const [micSupported, setMicSupported] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [micSupported] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
-  const finalTranscriptRef = useRef("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
 
-  // فحص دعم الميكرفون
+  // تنظيف الميكروفون عند الخروج
   useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
-
-    setMicSupported(true);
-    const rec = new SR();
-    rec.lang = "ar-EG";
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-
-    rec.onstart = () => {
-      finalTranscriptRef.current = "";
-      setListening(true);
-    };
-
-    rec.onresult = (e: any) => {
-      let finalText = finalTranscriptRef.current;
-      let interimText = "";
-
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const transcript = e.results[i]?.[0]?.transcript?.trim() || "";
-        if (!transcript) continue;
-        if (e.results[i].isFinal) finalText += (finalText ? " " : "") + transcript;
-        else interimText += (interimText ? " " : "") + transcript;
-      }
-
-      finalTranscriptRef.current = finalText;
-      const nextText = (finalText || interimText).trim();
-      if (nextText) setInput(nextText);
-    };
-
-    rec.onend = () => {
-      setListening(false);
-      const finalText = finalTranscriptRef.current.trim();
-      if (finalText) setInput(finalText);
-    };
-
-    rec.onerror = () => setListening(false);
-    recognitionRef.current = rec;
-
     return () => {
-      try { rec.stop(); } catch {}
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
@@ -164,19 +135,55 @@ export default function ChatView() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
-  function toggleMic() {
-    if (!recognitionRef.current) return;
-    if (listening) {
-      try { recognitionRef.current.stop(); } catch {}
-      setListening(false);
+  async function toggleMic() {
+    if (transcribing) return;
+
+    if (recording) {
+      mediaRecorderRef.current?.stop();
       return;
     }
 
-    finalTranscriptRef.current = "";
-    setInput("");
     try {
-      recognitionRef.current.start();
-    } catch {}
+      setInput("");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        setRecording(false);
+
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 500) return;
+
+        setTranscribing(true);
+        try {
+          const text = await transcribeAudio(blob);
+          if (text) setInput(text);
+        } catch {
+          setInput("");
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setRecording(false);
+    }
   }
 
   async function send() {
@@ -260,17 +267,20 @@ export default function ChatView() {
           {/* زر الميكرفون */}
           {micSupported && (
             <button onClick={toggleMic}
-              className={"w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition " +
-                (listening
+              disabled={transcribing || typing}
+              className={"w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition disabled:opacity-50 " +
+                (recording
                   ? "bg-red-500 text-white animate-pulse"
-                  : "bg-[var(--soft)] text-[var(--accent)]")}>
-              {listening ? <MicOff size={18} /> : <Mic size={18} />}
+                  : transcribing
+                    ? "bg-violet-500 text-white"
+                    : "bg-[var(--soft)] text-[var(--accent)]")}>
+              {transcribing ? <Loader2 size={18} className="animate-spin" /> : recording ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
           )}
           <input value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && send()}
-            placeholder={listening ? "استمع..." : "اكتب أو انطق مصروفك..."}
-            disabled={typing}
+            placeholder={recording ? "تسجيل... اضغط لإيقاف" : transcribing ? "نفريغ الصوت..." : "اكتب أو انطق مصروفك..."}
+            disabled={typing || recording || transcribing}
             className="flex-1 bg-[var(--bg-warm)] rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm disabled:opacity-50" />
           <button onClick={send} disabled={typing || !input.trim()}
             className="w-11 h-11 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0 disabled:opacity-50 shadow-sm">
