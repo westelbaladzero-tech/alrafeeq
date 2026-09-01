@@ -165,7 +165,7 @@ export default function MicLabView() {
             <button
               onClick={handleUpload}
               disabled={!canUpload}
-              className="rounded-2xl bg-emerald-600 text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="rounded-2xl bg-violet-600 text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Send size={18} />
               أرسل للتفريغ
