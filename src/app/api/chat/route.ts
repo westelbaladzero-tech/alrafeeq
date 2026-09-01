@@ -60,6 +60,44 @@ async function getGeminiInsights(message: string, context: string): Promise<stri
   }
 }
 
+// كلمات تدل على أن Groq لم يفهم الرسالة
+const CONFUSED_KEYWORDS = ["ما فهمت", "ما قدرتش", "تقدر توضح", "تقدر تعيد", "معلش، ما", "مش واضح", "مش قادر أفهم", "وضّح", "كرر", "جرّب مرة"];
+
+function isConfusedResponse(reply: string): boolean {
+  if (!reply) return false;
+  const lower = reply.toLowerCase();
+  return CONFUSED_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+// Gemini فهم عميق للرسائل الغامضة
+async function getGeminiUnderstanding(message: string, context: string, history: any[]): Promise<string> {
+  if (!GEMINI_API_KEY) return "";
+  try {
+    const recentHistory = history.slice(-4).map((h: any) => `${h.role === "user" ? "المستخدم" : "الرفيق"}: ${h.text}`).join("\n");
+    const res = await fetch(GEMINI_URL, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: GEMINI_MODEL,
+        input: [
+          {
+            type: "text",
+            text: `أنت مساعد ذكي تفهم العامية المصرية. المستخدم أرسل رسالة غامضة لم يفهمها المساعد الأول. حلّل الرسالة في سياق المحادثة والبيانات المالية، ووضّح ما يقصده المستخدم على الأرجح.\n\nرسالة المستخدم: ${message}\n\nسياق المحادثة:\n${recentHistory}\n\nالبيانات المالية:\n${context}\n\nماذا يقصد المستخدم على الأرجح؟ اشرح باختصار ووضّح القصد. إذا كان يسأل عن معاملات سابقة، اذكرها. إذا كان يسأل عن رصيد، وضّح ذلك.`,
+          },
+        ],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) return "";
+    return extractGeminiText(data).trim();
+  } catch {
+    return "";
+  }
+}
+
 const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userName}. تتكلم بالعربية العامية المصرية بطبيعية ودفء.
 
 شخصيتك:
@@ -301,7 +339,29 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content || "{}";
-    const parsed = extractJson(content);
+    let parsed = extractJson(content);
+
+    // 🔴 Gemini فهم عميق: لو Groq ما فهمش، Gemini يفهم ويرجع لـ Groq
+    if (isConfusedResponse(parsed.reply) && GEMINI_API_KEY && context !== "لا توجد بيانات بعد — مستخدم جديد") {
+      const understanding = await getGeminiUnderstanding(message, context, history || []);
+      if (understanding) {
+        const retryMessages = [...messages];
+        retryMessages[retryMessages.length - 1].content = `${message}\n\nملاحظة: المساعد المالي فهم أنك تقصد: ${understanding}. أجب بناءً على هذا الفهم.`;
+        try {
+          const retryRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + GROQ_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "openai/gpt-oss-120b", messages: retryMessages, temperature: 0.8, max_tokens: 800 }),
+          });
+          const retryData = await retryRes.json();
+          const retryContent = retryData.choices?.[0]?.message?.content || "{}";
+          const retryParsed = extractJson(retryContent);
+          if (retryParsed.reply && !isConfusedResponse(retryParsed.reply)) {
+            parsed = retryParsed;
+          }
+        } catch {}
+      }
+    }
 
     // احفظ المعاملة
     if (parsed.transaction && userId) {
