@@ -1,15 +1,14 @@
 "use client";
 import { useState } from "react";
-import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw, Mic } from "lucide-react";
+import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw } from "lucide-react";
 import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
-import MicLabView from "@/components/MicLabView";
 import AuthGate from "@/components/AuthGate";
 import InstallAndSupport from "@/components/InstallAndSupport";
 import { getSupabase } from "@/lib/supabase";
 
-type Tab = "chat" | "dashboard" | "history" | "mic";
+type Tab = "chat" | "dashboard" | "history";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
@@ -33,7 +32,7 @@ export default function Home() {
               <div className="text-base font-bold text-[var(--accent-dark)] leading-tight">الرفيق الأمين</div>
               <div className="text-[9px] text-[var(--muted)]">رفيقك في كل مالك</div>
             </div>
-            <a href="/admin" className="text-[8px] text-gray-200 hover:text-gray-400 cursor-pointer select-none" aria-hidden="true">·</a>
+            <a href="/admin" className="text-[10px] text-gray-300 hover:text-violet-500 cursor-pointer select-none px-1" aria-hidden="true" title="·">·</a>
           </div>
           <div className="flex items-center gap-1">
             <button onClick={() => window.location.reload()} className="w-8 h-8 rounded-lg hover:bg-[var(--soft)] flex items-center justify-center text-[var(--accent)] transition" title="تحديث">
@@ -53,7 +52,6 @@ export default function Home() {
           {tab === "chat" && <ChatView />}
           {tab === "dashboard" && <PeopleView />}
           {tab === "history" && <HistoryView />}
-          {tab === "mic" && <MicLabView />}
         </section>
 
         {/* التبويبات */}
@@ -61,7 +59,6 @@ export default function Home() {
           <TabBtn active={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
           <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
           <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Receipt size={20} />} label="سجل" />
-          <TabBtn active={tab === "mic"} onClick={() => setTab("mic")} icon={<Mic size={20} />} label="ميكروفون" />
         </nav>
       </main>
     </AuthGate>
