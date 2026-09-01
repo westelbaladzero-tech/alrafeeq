@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Mic, Send, Square, Volume2 } from "lucide-react";
+import { Loader2, Mic, Send, Square, Volume2, Receipt, Upload, ImageIcon } from "lucide-react";
 
 type UploadResult = {
   ok: boolean;
@@ -23,6 +23,13 @@ export default function MicLabView() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+
+  // حالات الفاتورة
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [receiptResult, setReceiptResult] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canStart = useMemo(() => supported && !recording && !uploading, [supported, recording, uploading]);
   const canStop = useMemo(() => recording && !uploading, [recording, uploading]);
@@ -121,6 +128,34 @@ export default function MicLabView() {
     mediaRecorderRef.current = null;
   }
 
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReceiptResult(null);
+    setImageFile(file);
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    setImageUrl(URL.createObjectURL(file));
+  }
+
+  async function analyzeReceipt() {
+    if (!imageFile || analyzing) return;
+    setAnalyzing(true);
+    setReceiptResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("image", imageFile);
+      const res = await fetch("/api/receipt-test", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "فشل تحليل الصورة");
+      setReceiptResult(data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "فشل تحليل الصورة";
+      setReceiptResult({ ok: false, error: message });
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   return (
     <div className="h-full overflow-auto p-4 bg-[var(--bg)]">
       <div className="max-w-xl mx-auto space-y-4">
@@ -207,6 +242,99 @@ export default function MicLabView() {
             </div>
           ) : (
             <div className="text-sm text-[var(--muted)]">بعد أول تسجيل سترى هنا هل وصل الملف للمسار المنفصل وهل تم تفريغه إلى نص.</div>
+          )}
+        </div>
+
+        {/* قسم اختبار الفاتورة */}
+        <div className="bg-white rounded-3xl border border-[var(--soft)] p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-11 h-11 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center">
+              <Receipt size={20} />
+            </div>
+            <div>
+              <h2 className="font-bold text-[var(--accent-dark)]">اختبار قراءة الفاتورة</h2>
+              <p className="text-xs text-[var(--muted)]">ارفع صورة فاتورة أو إيصال وسيقوم Gemini باستخراج البيانات.</p>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={analyzing}
+              className="flex-1 rounded-2xl bg-[var(--accent)] text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Upload size={18} />
+              {imageFile ? "غيّر الصورة" : "ارفع صورة"}
+            </button>
+            <button
+              onClick={analyzeReceipt}
+              disabled={!imageFile || analyzing}
+              className="flex-1 rounded-2xl bg-violet-600 text-white py-3 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {analyzing ? <Loader2 size={18} className="animate-spin" /> : <ImageIcon size={18} />}
+              {analyzing ? "يحلل..." : "حلّل الفاتورة"}
+            </button>
+          </div>
+
+          {imageUrl && (
+            <div className="mt-3 rounded-2xl overflow-hidden border border-[var(--soft)]">
+              <img src={imageUrl} alt="معاينة الفاتورة" className="w-full max-h-72 object-contain" />
+            </div>
+          )}
+
+          {receiptResult && (
+            <div className="mt-3 space-y-2 text-sm">
+              <div>الحالة: <span className={receiptResult.ok ? "text-green-600 font-bold" : "text-red-600 font-bold"}>{receiptResult.ok ? "نجح" : "فشل"}</span></div>
+              {receiptResult.merchant && (
+                <div className="flex justify-between bg-[var(--bg-warm)] rounded-xl px-3 py-2">
+                  <span className="text-[var(--muted)]">المتجر</span>
+                  <span className="font-bold text-[var(--accent-dark)]">{receiptResult.merchant}</span>
+                </div>
+              )}
+              {receiptResult.total && (
+                <div className="flex justify-between bg-[var(--bg-warm)] rounded-xl px-3 py-2">
+                  <span className="text-[var(--muted)]">الإجمالي</span>
+                  <span className="font-bold text-[var(--accent-dark)]">{receiptResult.total}</span>
+                </div>
+              )}
+              {receiptResult.date && (
+                <div className="flex justify-between bg-[var(--bg-warm)] rounded-xl px-3 py-2">
+                  <span className="text-[var(--muted)]">التاريخ</span>
+                  <span className="font-bold text-[var(--accent-dark)]">{receiptResult.date}</span>
+                </div>
+              )}
+              {receiptResult.category && (
+                <div className="flex justify-between bg-[var(--bg-warm)] rounded-xl px-3 py-2">
+                  <span className="text-[var(--muted)]">التصنيف</span>
+                  <span className="font-bold text-[var(--accent-dark)]">{receiptResult.category}</span>
+                </div>
+              )}
+              {receiptResult.items?.length > 0 && (
+                <div className="bg-[var(--bg-warm)] rounded-xl px-3 py-2">
+                  <div className="text-[var(--muted)] mb-1">العناصر</div>
+                  {receiptResult.items.map((item: string, i: number) => (
+                    <div key={i} className="text-[var(--text)]">{item}</div>
+                  ))}
+                </div>
+              )}
+              {receiptResult.rawText && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-[var(--muted)] text-xs">النص الخام</summary>
+                  <div className="mt-1 rounded-xl bg-[var(--bg-warm)] px-3 py-2 text-xs leading-6 text-[var(--text)] whitespace-pre-line">
+                    {receiptResult.rawText}
+                  </div>
+                </details>
+              )}
+              {receiptResult.error && <div className="text-red-600">{receiptResult.error}</div>}
+            </div>
           )}
         </div>
       </div>
