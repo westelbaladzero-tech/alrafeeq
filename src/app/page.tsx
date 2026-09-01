@@ -33,6 +33,7 @@ export default function Home() {
               <div className="text-base font-bold text-[var(--accent-dark)] leading-tight">الرفيق الأمين</div>
               <div className="text-[9px] text-[var(--muted)]">رفيقك في كل مالك</div>
             </div>
+            <a href="/admin" className="text-[8px] text-gray-200 hover:text-gray-400 cursor-pointer select-none" aria-hidden="true">·</a>
           </div>
           <div className="flex items-center gap-1">
             <button onClick={() => window.location.reload()} className="w-8 h-8 rounded-lg hover:bg-[var(--soft)] flex items-center justify-center text-[var(--accent)] transition" title="تحديث">
