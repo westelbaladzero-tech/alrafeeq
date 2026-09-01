@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-function extractOutputText(payload: any): string {
-  return payload?.output_text
-    || payload?.outputText
-    || payload?.interaction?.output_text
-    || payload?.interaction?.outputText
-    || payload?.interaction?.response?.output_text
-    || "";
+function extractTranscript(payload: any): string {
+  const parts = payload?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts.map((p: any) => p?.text || "").join("").trim();
 }
 
 export async function POST(req: Request) {
@@ -43,18 +41,25 @@ export async function POST(req: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gemini-3.7-flash",
-        input: [
+        contents: [
           {
-            type: "text",
-            text: "فرّغ الكلام المسموع في هذا التسجيل إلى نص عربي واضح فقط، بدون شرح إضافي، وبدون ترجمة، وبدون مقدمة.",
-          },
-          {
-            type: "audio",
-            data: base64Audio,
-            mime_type: mimeType,
+            parts: [
+              {
+                text: "فرّغ الكلام المسموع في هذا التسجيل إلى نص عربي واضح فقط، بدون شرح إضافي، وبدون ترجمة، وبدون مقدمة.",
+              },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: base64Audio,
+                },
+              },
+            ],
           },
         ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+        },
       }),
     });
 
@@ -64,7 +69,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, bytes, mimeType, error: apiError }, { status: 500 });
     }
 
-    const transcript = extractOutputText(geminiData).trim();
+    const transcript = extractTranscript(geminiData).trim();
     if (!transcript) {
       return NextResponse.json({
         ok: false,
