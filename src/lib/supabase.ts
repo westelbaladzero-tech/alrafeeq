@@ -1,4 +1,4 @@
-// عميل Supabase للمتصفح — تدفق implicit (أنسب للموبايل)
+// عميل Supabase للمتصفح — نستخدم PKCE لأن callback page تبدّل code إلى session
 import { createClient } from "@supabase/supabase-js";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -13,7 +13,7 @@ export function getSupabase() {
   if (!client) {
     client = createClient(URL, ANON, {
       auth: {
-        flowType: "implicit",
+        flowType: "pkce",
         detectSessionInUrl: true,
         persistSession: true,
       },
