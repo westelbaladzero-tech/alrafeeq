@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 function extractTranscript(payload: any): string {
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         input: [
           {
             type: "text",
-            text: "فرّغ الكلام المسموع في هذا التسجيل إلى نص عربي واضح فقط، بدون شرح إضافي، وبدون ترجمة، وبدون مقدمة.",
+            text: "أنت أداة تفريغ صوتي. استمع للتسجيل وفرّغه إلى نص عربي باللهجة المصرية العامية كما هو منطوق تمامًا، بدون أي شرح أو ترجمة أو مقدمة أو تعليق. اكتب فقط ما تقوله بالضبط.",
           },
           {
             type: "audio",
