@@ -1,10 +1,18 @@
 -- مخطط قاعدة بيانات الرفيق على Supabase
 -- نفّذ هذا الملف في محرر SQL داخل مشروع Supabase الخاص بك
 
--- جدول المستخدمين (يمكن ربطه بـ auth.users)
+-- جدول المستخدمين (يرتبط بـ auth.users)
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  pin text,
+  email text unique,
+  phone text unique,
+  pin_hash text,
+  email_verified boolean default false,
+  failed_attempts integer default 0,
+  locked_until timestamptz,
+  name text,
+  work_type text,
+  custom_categories text[] default '{}',
   created_at timestamptz default now()
 );
 
