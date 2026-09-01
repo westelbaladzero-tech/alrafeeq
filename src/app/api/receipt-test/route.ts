@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { trackUsage } from "@/lib/usage";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -118,6 +119,8 @@ export async function POST(req: Request) {
     }
 
     const parsed = parseReceipt(rawText);
+
+    await trackUsage("gemini", "receipt-test", true);
 
     return NextResponse.json({
       ok: true,

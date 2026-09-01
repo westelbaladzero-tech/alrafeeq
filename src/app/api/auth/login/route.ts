@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
+import { trackUsage } from "@/lib/usage";
 import * as crypto from "crypto";
 
 const MAX_ATTEMPTS = 5;
@@ -53,5 +54,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "تعذر إنشاء جلسة" }, { status: 500 });
   }
 
+  await trackUsage("magic_link", "login", true, profile.id);
   return NextResponse.json({ ok: true, redirect: linkData.properties.action_link });
 }

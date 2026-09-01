@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Shield, Users, Receipt, Mic, Trash2, LogOut, Loader2, Eye, EyeOff } from "lucide-react";
+import { Shield, Users, Receipt, Mic, Trash2, LogOut, Loader2, Eye, EyeOff, Activity, Mail, Database, Zap, RefreshCw } from "lucide-react";
 import MicLabView from "@/components/MicLabView";
 
 export default function AdminPage() {
@@ -13,8 +13,10 @@ export default function AdminPage() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [stats, setStats] = useState({ users: 0, transactions: 0, messages: 0 });
   const [users, setUsers] = useState<any[]>([]);
-  const [section, setSection] = useState<"stats" | "users" | "tools">("stats");
+  const [section, setSection] = useState<"stats" | "users" | "tools" | "services">("stats");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [services, setServices] = useState<any>(null);
+  const [testingServices, setTestingServices] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/stats", { credentials: "include" })
@@ -35,6 +37,18 @@ export default function AdminPage() {
     const usersData = await usersRes.json();
     if (statsData.ok) setStats({ users: statsData.users, transactions: statsData.transactions, messages: statsData.messages });
     if (usersData.ok) setUsers(usersData.users || []);
+    loadServices();
+  }
+
+  async function loadServices() {
+    setTestingServices(true);
+    try {
+      const res = await fetch("/api/admin/health", { credentials: "include" });
+      const data = await res.json();
+      if (data.ok) setServices(data.services);
+    } finally {
+      setTestingServices(false);
+    }
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -145,6 +159,7 @@ export default function AdminPage() {
           {[
             { key: "stats" as const, label: "إحصائيات", icon: <Shield size={16} /> },
             { key: "users" as const, label: "المستخدمين", icon: <Users size={16} /> },
+            { key: "services" as const, label: "خدمات", icon: <Activity size={16} /> },
             { key: "tools" as const, label: "أدوات", icon: <Mic size={16} /> },
           ].map(t => (
             <button key={t.key} onClick={() => setSection(t.key)}
@@ -202,6 +217,76 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {section === "services" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-700 text-sm">حالة الخدمات</h3>
+              <button onClick={loadServices} disabled={testingServices}
+                className="flex items-center gap-1 text-violet-600 text-sm disabled:opacity-50">
+                {testingServices ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                فحص
+              </button>
+            </div>
+
+            {services ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { key: "gemini", label: "Gemini AI", icon: <Zap size={18} />, color: "blue" },
+                  { key: "groq", label: "Groq AI", icon: <Zap size={18} />, color: "green" },
+                  { key: "smtp", label: "البريد (SMTP)", icon: <Mail size={18} />, color: "orange" },
+                  { key: "supabase", label: "Supabase DB", icon: <Database size={18} />, color: "violet" },
+                ].map(svc => {
+                  const s = services[svc.key];
+                  if (!s) return null;
+                  const pct = svc.key !== "supabase" && s.limit ? Math.min(100, (s.today / s.limit) * 100) : 0;
+                  return (
+                    <div key={svc.key} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={"text-" + svc.color + "-600"}>{svc.icon}</span>
+                          <span className="font-bold text-gray-700 text-sm">{svc.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={"w-2.5 h-2.5 rounded-full " + (s.ok ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+                          <span className={"text-xs font-bold " + (s.ok ? "text-green-600" : "text-red-500")}>
+                            {s.ok ? "متصل" : "مقطوع"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {s.latency > 0 && (
+                        <div className="text-[10px] text-gray-400 mb-1">زمن الاستجابة: {s.latency}ms</div>
+                      )}
+                      {s.error && (
+                        <div className="text-[10px] text-red-400 mb-1">{s.error}</div>
+                      )}
+
+                      {svc.key !== "supabase" && s.limit > 0 && (
+                        <div className="mt-2">
+                          <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                            <span>اليوم: {s.today} / {s.limit}</span>
+                            <span>الشهر: {s.month}</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={"h-full rounded-full " + (pct > 80 ? "bg-red-500" : pct > 50 ? "bg-orange-400" : "bg-green-500")}
+                              style={{ width: pct + "%" }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : testingServices ? (
+              <div className="flex items-center justify-center py-8 text-gray-400">
+                <Loader2 className="animate-spin" size={20} />
+              </div>
+            ) : (
+              <div className="text-center text-gray-400 py-8 text-sm">اضغط "فحص" لفحص الخدمات</div>
+            )}
           </div>
         )}
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, getServerClient } from "@/lib/supabase-server";
 import { parseTransaction } from "@/lib/parser";
+import { trackUsage } from "@/lib/usage";
 
 const GROQ_KEY = process.env.GROQ_API_KEY;
 
@@ -400,6 +401,8 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    await trackUsage("groq", "chat", true, userId || undefined);
 
     return NextResponse.json({ reply: parsed.reply || "معلش، ما قدرتش أفهم. تقدر تعيد السؤال بطريقة تانية؟ 🙏", transaction: parsed.transaction || null, category_update: parsed.category_update || null });
   } catch {

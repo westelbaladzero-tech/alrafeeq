@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { trackUsage } from "@/lib/usage";
 
 // تسجيل جديد: إيميل فقط → ماجيك لينك
 export async function POST(req: NextRequest) {
@@ -29,5 +30,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `خطأ: ${error.message}` }, { status: 500 });
   }
 
+  await trackUsage("magic_link", "register", !error);
   return NextResponse.json({ ok: true, message: "تم إرسال رابط التأكيد" });
 }
