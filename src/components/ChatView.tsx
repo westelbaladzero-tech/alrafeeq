@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X } from "lucide-react";
+import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X, Paperclip } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "alrafeeq_chat_history";
@@ -94,6 +94,7 @@ export default function ChatView() {
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // تنظيف الميكروفون عند الخروج
   useEffect(() => {
@@ -325,6 +326,13 @@ export default function ChatView() {
           ref={fileInputRef}
           type="file"
           accept="image/*"
+          onChange={handleImageSelect}
+          className="hidden"
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
           capture="environment"
           onChange={handleImageSelect}
           className="hidden"
@@ -363,9 +371,17 @@ export default function ChatView() {
               {transcribing ? <Loader2 size={18} className="animate-spin" /> : recording ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
           )}
-          {/* زر الكاميرا */}
+          {/* زر رفع ملف */}
           <button
             onClick={() => fileInputRef.current?.click()}
+            disabled={analyzingImage || typing || recording}
+            className="w-11 h-11 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
+          >
+            <Paperclip size={18} />
+          </button>
+          {/* زر كاميرا */}
+          <button
+            onClick={() => cameraInputRef.current?.click()}
             disabled={analyzingImage || typing || recording}
             className="w-11 h-11 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
           >
