@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, UserRound, Loader2, Mic, MicOff } from "lucide-react";
+import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "alrafeeq_chat_history";
@@ -86,10 +86,14 @@ export default function ChatView() {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [micSupported] = useState(true);
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
+  const [pendingImageUrl, setPendingImageUrl] = useState("");
+  const [analyzingImage, setAnalyzingImage] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // تنظيف الميكروفون عند الخروج
   useEffect(() => {
@@ -186,10 +190,64 @@ export default function ChatView() {
     }
   }
 
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingImage(file);
+    if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+    setPendingImageUrl(URL.createObjectURL(file));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removePendingImage() {
+    if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+    setPendingImage(null);
+    setPendingImageUrl("");
+  }
+
+  async function analyzeReceiptImage(image: File): Promise<string> {
+    const formData = new FormData();
+    formData.append("image", image);
+    const res = await fetch("/api/receipt-test", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data?.error || "فشل تحليل الصورة");
+    const parts: string[] = [];
+    if (data.merchant && data.merchant !== "غير محدد") parts.push(`فاتورة من ${data.merchant}`);
+    else parts.push("فاتورة");
+    if (data.total && data.total !== "غير محدد") parts.push(`بمبلغ ${data.total} جنيه`);
+    if (data.category && data.category !== "غير محدد") parts.push(`تصنيف: ${data.category}`);
+    if (data.date && data.date !== "غير محدد") parts.push(`تاريخ: ${data.date}`);
+    if (data.items?.length > 0) parts.push(`عناصر: ${data.items.join("، ")}`);
+    return parts.join(" - ");
+  }
+
   async function send() {
-    if (!input.trim() || typing) return;
-    const text = input.trim();
-    const userMsg = { role: "user" as const, text };
+    if (typing) return;
+
+    let text = input.trim();
+    let imageThumb = "";
+
+    if (pendingImage) {
+      setAnalyzingImage(true);
+      try {
+        const receiptText = await analyzeReceiptImage(pendingImage);
+        imageThumb = pendingImageUrl;
+        text = text ? `${receiptText} - ${text}` : receiptText;
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : "فشل تحليل الصورة";
+        const botMsg = { role: "bot" as const, text: `ما قدرت أحلل الصورة: ${errMsg} 🙏` };
+        setMessages(m => [...m, botMsg]);
+        await saveCloudMessage(botMsg);
+        setAnalyzingImage(false);
+        removePendingImage();
+        return;
+      }
+      setAnalyzingImage(false);
+      removePendingImage();
+    }
+
+    if (!text) return;
+    const userMsg = { role: "user" as const, text: imageThumb ? `${text}\n📷 فاتورة` : text };
     const newMsgs = [...messages, userMsg];
     setMessages(newMsgs);
     setInput("");
@@ -263,6 +321,34 @@ export default function ChatView() {
       </div>
 
       <div className="p-3 border-t border-[var(--soft)] bg-white relative z-10">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageSelect}
+          className="hidden"
+        />
+
+        {pendingImageUrl && (
+          <div className="mb-2 relative inline-block">
+            <img src={pendingImageUrl} alt="فاتورة" className="h-20 w-20 object-cover rounded-xl border border-[var(--soft)]" />
+            <button
+              onClick={removePendingImage}
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
+
+        {analyzingImage && (
+          <div className="mb-2 flex items-center gap-2 text-sm text-violet-600">
+            <Loader2 size={16} className="animate-spin" />
+            بنحلل الفاتورة...
+          </div>
+        )}
+
         <div className="flex gap-2 items-end">
           {/* زر الميكرفون */}
           {micSupported && (
@@ -277,12 +363,20 @@ export default function ChatView() {
               {transcribing ? <Loader2 size={18} className="animate-spin" /> : recording ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
           )}
+          {/* زر الكاميرا */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={analyzingImage || typing || recording}
+            className="w-11 h-11 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
+          >
+            <Camera size={18} />
+          </button>
           <input value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && send()}
-            placeholder={recording ? "تسجيل... اضغط لإيقاف" : transcribing ? "نفريغ الصوت..." : "اكتب أو انطق مصروفك..."}
-            disabled={typing || recording || transcribing}
+            placeholder={recording ? "تسجيل... اضغط لإيقاف" : transcribing ? "نفريغ الصوت..." : analyzingImage ? "بنحلل الفاتورة..." : pendingImage ? "أضف ملاحظة أو أرسل مباشرة..." : "اكتب أو انطق مصروفك..."}
+            disabled={typing || recording || transcribing || analyzingImage}
             className="flex-1 bg-[var(--bg-warm)] rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm disabled:opacity-50" />
-          <button onClick={send} disabled={typing || !input.trim()}
+          <button onClick={send} disabled={typing || analyzingImage || (!input.trim() && !pendingImage)}
             className="w-11 h-11 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0 disabled:opacity-50 shadow-sm">
             {typing ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
