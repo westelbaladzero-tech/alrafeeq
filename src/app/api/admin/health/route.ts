@@ -13,9 +13,8 @@ const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const GROQ_KEY = process.env.GROQ_API_KEY || "";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 function verifyAdmin(req: Request): boolean {
   const token = req.headers.get("cookie") || "";
@@ -61,8 +60,8 @@ async function testGroq(): Promise<{ ok: boolean; latency: number; error?: strin
 }
 
 function testSMTP(): { ok: boolean; latency: number; error?: string } {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    return { ok: false, latency: 0, error: "إعدادات SMTP غير مكتملة" };
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false, latency: 0, error: "إعدادات Supabase غير مكتملة" };
   }
   return { ok: true, latency: 0 };
 }
