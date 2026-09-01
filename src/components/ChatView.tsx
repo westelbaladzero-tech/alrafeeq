@@ -357,12 +357,12 @@ export default function ChatView() {
           </div>
         )}
 
-        <div className="flex gap-2 items-end">
+        <div className="flex gap-1 items-end">
           {/* زر الميكرفون */}
           {micSupported && (
             <button onClick={toggleMic}
               disabled={transcribing || typing}
-              className={"w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 transition disabled:opacity-50 " +
+              className={"w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 transition disabled:opacity-50 " +
                 (recording
                   ? "bg-red-500 text-white animate-pulse"
                   : transcribing
@@ -375,7 +375,7 @@ export default function ChatView() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={analyzingImage || typing || recording}
-            className="w-11 h-11 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
+            className="w-9 h-9 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
           >
             <Paperclip size={18} />
           </button>
@@ -383,7 +383,7 @@ export default function ChatView() {
           <button
             onClick={() => cameraInputRef.current?.click()}
             disabled={analyzingImage || typing || recording}
-            className="w-11 h-11 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
+            className="w-9 h-9 rounded-2xl bg-[var(--soft)] text-[var(--accent)] flex items-center justify-center shrink-0 transition disabled:opacity-50"
           >
             <Camera size={18} />
           </button>
@@ -393,7 +393,7 @@ export default function ChatView() {
             disabled={typing || recording || transcribing || analyzingImage}
             className="flex-1 bg-[var(--bg-warm)] rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm disabled:opacity-50" />
           <button onClick={send} disabled={typing || analyzingImage || (!input.trim() && !pendingImage)}
-            className="w-11 h-11 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0 disabled:opacity-50 shadow-sm">
+            className="w-9 h-9 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shrink-0 disabled:opacity-50 shadow-sm">
             {typing ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>
         </div>
