@@ -4,6 +4,62 @@ import { parseTransaction } from "@/lib/parser";
 
 const GROQ_KEY = process.env.GROQ_API_KEY;
 
+// Gemini co-pilot — مساعد خفي للتحليل المالي
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+
+const ANALYSIS_KEYWORDS = ["تقرير", "أكتر", "أنهى", "تحليل", "نصيحة", "إيه اللي", "صرفت كام",
+  "أكثر", "ملخص", "إحصائيات", "نمط", "أنماط", "ليه", "نصائح", "ميزانية", "كم صرفت", "فين فلوس",
+  "رصيده", "ليا كام", "عليا كام", "وضع", "حال"];
+
+function needsGeminiAnalysis(message: string): boolean {
+  const lower = message.toLowerCase().trim();
+  return ANALYSIS_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function extractGeminiText(payload: any): string {
+  if (payload?.output_text) return payload.output_text;
+  const steps = payload?.steps;
+  if (!Array.isArray(steps)) return "";
+  const texts: string[] = [];
+  for (const step of steps) {
+    const content = step?.content;
+    if (!Array.isArray(content)) continue;
+    for (const item of content) {
+      if (item?.text) texts.push(item.text);
+    }
+  }
+  return texts.join("").trim();
+}
+
+async function getGeminiInsights(message: string, context: string): Promise<string> {
+  if (!GEMINI_API_KEY) return "";
+  try {
+    const res = await fetch(GEMINI_URL, {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: GEMINI_MODEL,
+        input: [
+          {
+            type: "text",
+            text: `أنت محلل مالي ذكي. حلل البيانات المالية التالية وأجب عن سؤال المستخدم برؤى ونصائح مفيدة بالعربية المصرية العامية.\n\nسؤال المستخدم: ${message}\n\nالبيانات المالية:\n${context}\n\nقدم تحليل مختصر ومفيد: أنماط الإنفاق، نصائح عملية، ملاحظات مهمة. كن مختصرًا ودقيقًا. الأرقام بالأرقام وليس بالحروف.`,
+          },
+        ],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) return "";
+    return extractGeminiText(data).trim();
+  } catch {
+    return "";
+  }
+}
+
 const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userName}. تتكلم بالعربية العامية المصرية بطبيعية ودفء.
 
 شخصيتك:
@@ -28,6 +84,8 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - ما فهمت: اسأل ببساطة
 
 {onboarding}
+
+{geminiInsights}
 
 قواعد مهمة جداً:
 - ما تقول "تم تسجيل" أو "تم اعتماد" — لغة روبوت
@@ -210,11 +268,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply: p ? "سجّلتها يا " + userName + " 👌" : "جرّب: صرفت ٥٠ على غداء", transaction: p });
   }
 
+  // Gemini co-pilot: تحليل ذكي للاستفسارات المعقدة
+  let geminiInsights = "";
+  if (needsGeminiAnalysis(message) && context !== "لا توجد بيانات بعد — مستخدم جديد") {
+    geminiInsights = await getGeminiInsights(message, context);
+    if (geminiInsights) {
+      geminiInsights = `تحليل إضافي من المساعد المالي:\n${geminiInsights}\n\nاستخدم هذا التحليل لإثراء ردك بنصائح ورؤى مفيدة، لكن تكلم بأسلوبك الطبيعي.`;
+    }
+  }
+
   const prompt = SYSTEM_PROMPT
     .replace(/\{userName\}/g, userName)
     .replace("{context}", context)
     .replace("{customCats}", customCats.length > 0 ? customCats.join("، ") : "لا توجد بعد")
-    .replace("{onboarding}", onboarding);
+    .replace("{onboarding}", onboarding)
+    .replace("{geminiInsights}", geminiInsights);
 
   const messages: any[] = [{ role: "system", content: prompt }];
   if (history && Array.isArray(history)) {
