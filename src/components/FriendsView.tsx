@@ -55,6 +55,9 @@ export default function FriendsView() {
   const [showRelation, setShowRelation] = useState(false);
   const [relationType, setRelationType] = useState("");
   const [relationForShip, setRelationForShip] = useState<string | null>(null);
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [totalInstallments, setTotalInstallments] = useState("");
+  const [installmentStart, setInstallmentStart] = useState("");
 
   useEffect(() => { load(); }, []);
 
@@ -284,16 +287,30 @@ export default function FriendsView() {
     setSubmitting(true);
     const sb = getSupabase();
     if (!sb) { setSubmitting(false); return; }
-    const { error } = await sb.from("debt_requests").insert({
+    
+    const insertData: any = {
       creditor: uid,
       debtor: selectedFriend.friend_id,
       friendship_id: selectedFriend.friendship_id,
       amount: amt,
       description: debtDesc || null,
       status: "pending",
-    });
+      is_installment: isInstallment,
+    };
+    
+    if (isInstallment) {
+      const total = Number(totalInstallments);
+      if (!total || total < 2) { setActionErr("عدد الأقساط لازم 2 على الأقل"); setSubmitting(false); return; }
+      insertData.total_installments = total;
+      insertData.installment_amount = Math.round((amt / total) * 100) / 100;
+      insertData.paid_installments = 0;
+      if (installmentStart) insertData.start_date = installmentStart;
+    }
+    
+    const { error } = await sb.from("debt_requests").insert(insertData);
     if (error) { setActionErr("تعذّر إرسال الطلب"); setSubmitting(false); return; }
-    setDebtAmount(""); setDebtDesc(""); setShowDebt(false); await load();
+    setDebtAmount(""); setDebtDesc(""); setIsInstallment(false); setTotalInstallments(""); setInstallmentStart("");
+    setShowDebt(false); await load();
     setSubmitting(false);
   }
 
@@ -395,11 +412,38 @@ export default function FriendsView() {
               <h3 className="text-lg font-bold mb-1">ليّ عنده</h3>
               <p className="text-xs text-gray-400 mb-4">عندك فلوس عند {selectedFriend.friend_phone}</p>
               <input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)}
-                placeholder="المبلغ بالجنيه" required
+                placeholder="المبلغ الإجمالي بالجنيه" required
                 className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
               <input type="text" value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)}
                 placeholder="وصف (اختياري)"
                 className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => setIsInstallment(false)}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (!isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  دفعة واحدة
+                </button>
+                <button onClick={() => setIsInstallment(true)}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  أقساط
+                </button>
+              </div>
+
+              {isInstallment && (
+                <div className="space-y-2 mb-3">
+                  <input type="number" value={totalInstallments} onChange={(e) => setTotalInstallments(e.target.value)}
+                    placeholder="عدد الأقساط (مثلاً: 12)" min={2}
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  <input type="date" value={installmentStart} onChange={(e) => setInstallmentStart(e.target.value)}
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  {debtAmount && totalInstallments && Number(totalInstallments) > 0 && (
+                    <div className="bg-green-50 rounded-xl p-2 text-xs text-green-600 text-center">
+                      كل قسط: {Math.round((Number(debtAmount) / Number(totalInstallments)) * 100) / 100} جنيه × {totalInstallments} شهر
+                    </div>
+                  )}
+                </div>
+              )}
+
               {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
               <button onClick={sendDebtRequest} disabled={submitting}
                 className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
