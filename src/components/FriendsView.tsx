@@ -73,7 +73,7 @@ export default function FriendsView() {
   }
 
   async function loadFriends(userId: string) {
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) return;
     const { data: ships } = await sb
       .from("friendships")
@@ -112,7 +112,7 @@ export default function FriendsView() {
   }
 
   async function loadPendingDebts(userId: string) {
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) return;
     const { data: owed } = await sb.from("debt_requests")
       .select("id, amount, description, creditor, debtor, created_at")
@@ -133,7 +133,7 @@ export default function FriendsView() {
   }
 
   async function loadPendingSettlements(userId: string) {
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) return;
     const { data: sent } = await sb.from("settlements")
       .select("id, amount, from_user, to_user, created_at")
@@ -156,7 +156,7 @@ export default function FriendsView() {
     setErr("");
     if (!phoneInput || !uid) return;
     setAdding(true);
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) { setAdding(false); return; }
     try {
       const { data: target } = await sb.from("profiles").select("id, phone").eq("phone", phoneInput).maybeSingle();
@@ -182,7 +182,7 @@ export default function FriendsView() {
   }
 
   async function respondFriendship(shipId: string, accept: boolean) {
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) return;
     await sb.from("friendships")
       .update({ status: accept ? "accepted" : "blocked", updated_at: new Date().toISOString() })
@@ -198,7 +198,7 @@ export default function FriendsView() {
 
   async function setRelationship() {
     if (!relationType || !relationForShip) return;
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) return;
     await sb.from("friendships")
       .update({ relationship_type: relationType })
@@ -237,7 +237,7 @@ export default function FriendsView() {
     if (!pinInput) { setPinErr("اكتب الرمز"); return; }
     setPinVerifying(true);
 
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) { setPinVerifying(false); return; }
 
     const { data: { session } } = await sb.auth.getSession();
@@ -259,7 +259,7 @@ export default function FriendsView() {
 
       // PIN صحيح ← نفّذ العملية
       if (pendingAction) {
-        const sb2 = getSupabase();
+        const sb2 = getSupabase() as any;
         if (sb2) {
           const table = pendingAction.type === "debt" ? "debt_requests" : "settlements";
           const status = pendingAction.accept ? "confirmed" : "rejected";
@@ -285,7 +285,7 @@ export default function FriendsView() {
     const amt = Number(debtAmount);
     if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
     setSubmitting(true);
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) { setSubmitting(false); return; }
     
     const insertData: any = {
@@ -320,7 +320,7 @@ export default function FriendsView() {
     const amt = Number(settleAmount);
     if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
     setSubmitting(true);
-    const sb = getSupabase();
+    const sb = getSupabase() as any;
     if (!sb) { setSubmitting(false); return; }
     const { error } = await sb.from("settlements").insert({
       from_user: uid,
