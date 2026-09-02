@@ -26,7 +26,7 @@ async function getUserId(): Promise<string | null> {
 function getQueue(uid: string): QueueItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(queueKey(uid));
+    const raw = localStorage.getItem(KEYS.queue(uid));
     if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
@@ -36,7 +36,7 @@ function getQueue(uid: string): QueueItem[] {
 function saveQueue(uid: string, items: QueueItem[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(queueKey(uid), JSON.stringify(items));
+    localStorage.setItem(KEYS.queue(uid), JSON.stringify(items));
   } catch {}
 }
 
@@ -121,7 +121,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
   saveQueue(uid, remaining);
 
   // 2) اسحب الجديد من السحابة
-  const lastSync = localStorage.getItem(lastSyncKey(uid)) || "1970-01-01T00:00:00Z";
+  const lastSync = localStorage.getItem(KEYS.lastSync(uid)) || "1970-01-01T00:00:00Z";
 
   // معاملات جديدة
   try {
@@ -133,7 +133,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
       .order("created_at", { ascending: false });
 
     if (newTxs && newTxs.length > 0) {
-      const raw = localStorage.getItem(txKey(uid));
+      const raw = localStorage.getItem(KEYS.transactions(uid));
       let local: any[] = [];
       try { local = raw ? JSON.parse(raw) : []; } catch {}
       const localIds = new Set(local.map((t: any) => t.id));
@@ -153,7 +153,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
           downloaded++;
         }
       }
-      localStorage.setItem(txKey(uid), JSON.stringify(local));
+      localStorage.setItem(KEYS.transactions(uid), JSON.stringify(local));
     }
   } catch {}
 
@@ -167,7 +167,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
       .order("created_at", { ascending: true });
 
     if (newMsgs && newMsgs.length > 0) {
-      const raw = localStorage.getItem(chatKey(uid));
+      const raw = localStorage.getItem(KEYS.chat(uid));
       let local: any[] = [];
       try { local = raw ? JSON.parse(raw) : []; } catch {}
       const localSigs = new Set(local.map((m: any) => `${m.role}:${m.text}`));
@@ -178,12 +178,12 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
           downloaded++;
         }
       }
-      localStorage.setItem(chatKey(uid), JSON.stringify(local));
+      localStorage.setItem(KEYS.chat(uid), JSON.stringify(local));
     }
   } catch {}
 
   // 3) حدّث آخر مزامنة
-  localStorage.setItem(lastSyncKey(uid), new Date().toISOString());
+  localStorage.setItem(KEYS.lastSync(uid), new Date().toISOString());
 
   // أبلغ المستمعين
   const pending = remaining.length;
