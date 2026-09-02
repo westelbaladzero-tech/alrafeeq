@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
-import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw } from "lucide-react";
+import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw, UserPlus } from "lucide-react";
 import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
+import FriendsView from "@/components/FriendsView";
 import AuthGate from "@/components/AuthGate";
 import InstallAndSupport from "@/components/InstallAndSupport";
 import ConnectionStatus from "@/components/ConnectionStatus";
@@ -11,7 +12,7 @@ import { getSupabase } from "@/lib/supabase";
 import { initSync } from "@/lib/sync";
 import { KEYS } from "@/lib/keys";
 
-type Tab = "chat" | "dashboard" | "history";
+type Tab = "chat" | "dashboard" | "history" | "friends";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
@@ -67,11 +68,13 @@ export default function Home() {
           {tab === "chat" && <ChatView />}
           {tab === "dashboard" && <PeopleView />}
           {tab === "history" && <HistoryView />}
+          {tab === "friends" && <FriendsView />}
         </section>
 
         {/* التبويبات */}
         <nav className="flex justify-around py-1.5 px-2 bg-white border-t border-[var(--soft)] shrink-0">
           <TabBtn active={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
+          <TabBtn active={tab === "friends"} onClick={() => setTab("friends")} icon={<UserPlus size={20} />} label="أصدقاء" />
           <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
           <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Receipt size={20} />} label="سجل" />
         </nav>
@@ -82,7 +85,7 @@ export default function Home() {
 
 function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (
-    <button onClick={onClick} className={"flex flex-col items-center gap-0.5 px-8 py-1.5 rounded-xl transition " + (active ? "text-[var(--accent)] font-bold" : "text-gray-400")}>
+    <button onClick={onClick} className={"flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition " + (active ? "text-[var(--accent)] font-bold" : "text-gray-400")}>
       {icon}<span className="text-[11px]">{label}</span>
     </button>
   );
