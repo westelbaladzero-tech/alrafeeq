@@ -65,21 +65,24 @@ export default function FriendsView() {
   const [totalInstallments, setTotalInstallments] = useState("");
   const [installmentStart, setInstallmentStart] = useState("");
 
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   useEffect(() => {
     load();
-    const interval = setInterval(load, 15000); // تحديث كل 15 ثانية
+    const interval = setInterval(load, 15000);
     return () => clearInterval(interval);
   }, []);
 
   async function load() {
-    setLoading(true);
+    if (isInitialLoad) setLoading(true);
     const userId = await getResolvedUserId();
-    if (!userId) { setLoading(false); return; }
+    if (!userId) { setLoading(false); setIsInitialLoad(false); return; }
     setUid(userId);
     await loadFriends(userId);
     await loadPendingDebts(userId);
     await loadPendingSettlements(userId);
     setLoading(false);
+    setIsInitialLoad(false);
   }
 
   async function loadFriends(userId: string) {
@@ -236,15 +239,35 @@ export default function FriendsView() {
   }
 
   async function respondDebt(debtId: string, accept: boolean) {
-    // اطلب PIN قبل التأكيد
-    setPendingAction({ type: "debt", id: debtId, accept });
-    setPinInput(""); setPinErr(""); setShowPin(true);
+    if (accept) {
+      // الموافقة تحتاج PIN
+      setPendingAction({ type: "debt", id: debtId, accept: true });
+      setPinInput(""); setPinErr(""); setShowPin(true);
+    } else {
+      // الرفض مباشر بدون PIN
+      const sb = getSupabase() as any;
+      if (!sb) return;
+      await sb.from("debt_requests")
+        .update({ status: "rejected", confirmed_at: new Date().toISOString() })
+        .eq("id", debtId);
+      await load();
+    }
   }
 
   async function respondSettlement(settId: string, accept: boolean) {
-    // اطلب PIN قبل التأكيد
-    setPendingAction({ type: "settlement", id: settId, accept });
-    setPinInput(""); setPinErr(""); setShowPin(true);
+    if (accept) {
+      // الموافقة تحتاج PIN
+      setPendingAction({ type: "settlement", id: settId, accept: true });
+      setPinInput(""); setPinErr(""); setShowPin(true);
+    } else {
+      // الرفض مباشر بدون PIN
+      const sb = getSupabase() as any;
+      if (!sb) return;
+      await sb.from("settlements")
+        .update({ status: "rejected", confirmed_at: new Date().toISOString() })
+        .eq("id", settId);
+      await load();
+    }
   }
 
   async function verifyPinAndExecute() {
