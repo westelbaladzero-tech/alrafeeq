@@ -5,6 +5,7 @@ import type { Transaction } from './types';
 import { isSupabaseEnabled, getSupabase } from './supabase';
 import { isOnline, addToQueue } from './sync';
 import { KEYS, cleanOldKeys } from './keys';
+import { getResolvedUserId } from './client-id';
 
 let oldKeyCleaned = false;
 
@@ -15,11 +16,7 @@ export function genId(): string {
 }
 
 async function getUserId(): Promise<string | null> {
-  if (!isSupabaseEnabled) return null;
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data } = await sb.auth.getUser();
-  return data.user?.id || null;
+  return getResolvedUserId();
 }
 
 function getLocal(uid: string): Transaction[] {

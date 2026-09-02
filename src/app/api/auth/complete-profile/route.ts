@@ -34,13 +34,17 @@ export async function POST(req: NextRequest) {
   // تشفير الرمز
   const pinHash = crypto.scryptSync(pin, user.email, 64).toString("hex");
 
+  // معرف العميل — فريد لكل مستخدم
+  const clientId = crypto.randomUUID();
+
   // أنشئ الملف
   const { error } = await admin.from("profiles").insert({
     id: user.id, email: user.email, phone,
     pin_hash: pinHash, email_verified: true,
     failed_attempts: 0, locked_until: null,
+    client_id: clientId,
   });
 
   if (error) return NextResponse.json({ error: "تعذر حفظ البيانات" }, { status: 500 });
-  return NextResponse.json({ ok: true, message: "تم ربط البيانات" });
+  return NextResponse.json({ ok: true, message: "تم ربط البيانات", clientId });
 }

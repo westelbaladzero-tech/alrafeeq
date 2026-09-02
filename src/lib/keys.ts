@@ -21,6 +21,10 @@ export const KEYS = {
 
   // تنظيف لمرة واحدة
   oldCleaned: "alrafeeq_old_keys_cleaned",
+
+  // معرف العميل (client_id) + معرف المستخدم (user_id) مخزنان محليًا
+  clientId: "alrafeeq_client_id",
+  userId: "alrafeeq_user_id",
 };
 
 // تنظيف المفاتيح القديمة المشتركة — مرة واحدة فقط

@@ -45,9 +45,16 @@ function CallbackInner() {
       }
 
       const { data: profile } = await sb
-        .from("profiles").select("id").eq("id", user.id).maybeSingle();
+        .from("profiles").select("id, client_id").eq("id", user.id).maybeSingle() as any;
 
       if (profile) {
+        // خزّن client_id و user_id محليًا
+        if (typeof window !== "undefined") {
+          if (profile.client_id) {
+            localStorage.setItem("alrafeeq_client_id", profile.client_id);
+          }
+          localStorage.setItem("alrafeeq_user_id", user.id);
+        }
         router.replace("/");
       } else {
         router.replace("/auth/complete-profile");

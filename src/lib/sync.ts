@@ -3,6 +3,7 @@
 
 import { getSupabase, isSupabaseEnabled } from "./supabase";
 import { KEYS } from "./keys";
+import { getResolvedUserId } from "./client-id";
 
 export type OpType = "add_tx" | "delete_tx" | "add_message";
 
@@ -15,11 +16,7 @@ interface QueueItem {
 
 // ─── معرف المستخدم ───
 async function getUserId(): Promise<string | null> {
-  if (!isSupabaseEnabled) return null;
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data } = await sb.auth.getUser();
-  return data.user?.id || null;
+  return getResolvedUserId();
 }
 
 // ─── الطابور ───

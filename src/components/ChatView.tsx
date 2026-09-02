@@ -4,6 +4,7 @@ import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X, Paperclip } from
 import { getSupabase } from "@/lib/supabase";
 import { isOnline, addToQueue } from "@/lib/sync";
 import { saveLearnedResponse, tryOfflineReply } from "@/lib/learned-responses";
+import { getResolvedUserId } from "@/lib/client-id";
 import { KEYS, cleanOldKeys } from "@/lib/keys";
 
 const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. قبل ما نبدأ، تحب أناديك بإيه؟";
@@ -11,10 +12,7 @@ const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. 
 interface Msg { role: "bot" | "user"; text: string }
 
 async function getUserId(): Promise<string | null> {
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data: userData } = await sb.auth.getUser();
-  return userData.user?.id || null;
+  return getResolvedUserId();
 }
 
 function getLocalMessages(userId: string): Msg[] {
