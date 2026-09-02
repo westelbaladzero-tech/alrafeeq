@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote } from "lucide-react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
 
@@ -46,6 +46,11 @@ export default function FriendsView() {
   const [settleAmount, setSettleAmount] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinErr, setPinErr] = useState("");
+  const [pinVerifying, setPinVerifying] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ type: "debt" | "settlement"; id: string; accept: boolean } | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -178,21 +183,62 @@ export default function FriendsView() {
   }
 
   async function respondDebt(debtId: string, accept: boolean) {
-    const sb = getSupabase();
-    if (!sb) return;
-    await sb.from("debt_requests")
-      .update({ status: accept ? "confirmed" : "rejected", confirmed_at: new Date().toISOString() })
-      .eq("id", debtId);
-    await load();
+    // اطلب PIN قبل التأكيد
+    setPendingAction({ type: "debt", id: debtId, accept });
+    setPinInput(""); setPinErr(""); setShowPin(true);
   }
 
   async function respondSettlement(settId: string, accept: boolean) {
+    // اطلب PIN قبل التأكيد
+    setPendingAction({ type: "settlement", id: settId, accept });
+    setPinInput(""); setPinErr(""); setShowPin(true);
+  }
+
+  async function verifyPinAndExecute() {
+    setPinErr("");
+    if (!pinInput) { setPinErr("اكتب الرمز"); return; }
+    setPinVerifying(true);
+
     const sb = getSupabase();
-    if (!sb) return;
-    await sb.from("settlements")
-      .update({ status: accept ? "confirmed" : "rejected", confirmed_at: new Date().toISOString() })
-      .eq("id", settId);
-    await load();
+    if (!sb) { setPinVerifying(false); return; }
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { setPinErr("انتهت الجلسة"); setPinVerifying(false); return; }
+
+    try {
+      const res = await fetch("/api/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinInput, accessToken: session.access_token }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setPinErr(data.error || "الرمز خاطئ");
+        setPinVerifying(false);
+        return;
+      }
+
+      // PIN صحيح ← نفّذ العملية
+      if (pendingAction) {
+        const sb2 = getSupabase();
+        if (sb2) {
+          const table = pendingAction.type === "debt" ? "debt_requests" : "settlements";
+          const status = pendingAction.accept ? "confirmed" : "rejected";
+          await sb2.from(table)
+            .update({ status, confirmed_at: new Date().toISOString() })
+            .eq("id", pendingAction.id);
+        }
+      }
+
+      setShowPin(false);
+      setPinInput("");
+      setPendingAction(null);
+      await load();
+    } catch {
+      setPinErr("خطأ في الاتصال");
+    }
+    setPinVerifying(false);
   }
 
   async function sendDebtRequest() {
@@ -476,6 +522,30 @@ export default function FriendsView() {
               {adding ? "جاري الإضافة..." : "إرسال طلب صداقة"}
             </button>
             <button onClick={() => setShowAdd(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+          </div>
+        </div>
+      )}
+
+      {showPin && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPin(false)}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <div className="w-12 h-12 rounded-full bg-[var(--soft)] flex items-center justify-center mx-auto mb-2">
+                <Lock size={22} className="text-[var(--accent)]" />
+              </div>
+              <h3 className="text-base font-bold">تأكيد بالرمز</h3>
+              <p className="text-xs text-gray-400 mt-1">اكتب رمز الحماية للتأكيد</p>
+            </div>
+            <input type="password" value={pinInput} onChange={(e) => setPinInput(e.target.value)}
+              placeholder="••••" maxLength={8}
+              className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-center text-lg tracking-widest" />
+            {pinErr && <div className="text-red-500 text-sm mb-2 text-center">{pinErr}</div>}
+            <button onClick={verifyPinAndExecute} disabled={pinVerifying}
+              className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+              {pinVerifying ? "جاري التحقق..." : "تأكيد"}
+            </button>
+            <button onClick={() => { setShowPin(false); setPinInput(""); setPinErr(""); setPendingAction(null); }}
+              className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
           </div>
         </div>
       )}
