@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Phone, Lock, Check, Wallet } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
+import { KEYS } from "@/lib/keys";
 
 function CompleteInner() {
   const params = useSearchParams();
@@ -67,6 +68,21 @@ function CompleteInner() {
       const data = await res.json();
       setLoading(false);
       if (data.error) { setErr(data.error); return; }
+
+      // خزّن المعرّفات محليًا بعد نجاح إنشاء الحساب
+      if (typeof window !== "undefined") {
+        const sb = getSupabase();
+        if (sb) {
+          const { data: { user } } = await sb.auth.getUser();
+          if (user) {
+            localStorage.setItem(KEYS.userId, user.id);
+            if (data.clientId) {
+              localStorage.setItem(KEYS.clientId, data.clientId);
+            }
+          }
+        }
+      }
+
       setStatus("done");
       setTimeout(() => { window.location.href = "/"; }, 1500);
     } catch {

@@ -9,6 +9,7 @@ import InstallAndSupport from "@/components/InstallAndSupport";
 import ConnectionStatus from "@/components/ConnectionStatus";
 import { getSupabase } from "@/lib/supabase";
 import { initSync } from "@/lib/sync";
+import { KEYS } from "@/lib/keys";
 
 type Tab = "chat" | "dashboard" | "history";
 
@@ -20,6 +21,11 @@ export default function Home() {
   }, []);
 
   async function handleLogout() {
+    // امسح المعرّفات المحلية المخزنة لمنع تسريب البيانات بين الحسابات
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(KEYS.userId);
+      localStorage.removeItem(KEYS.clientId);
+    }
     const sb = getSupabase();
     if (sb) await sb.auth.signOut();
     window.location.reload();

@@ -45,6 +45,11 @@ function CallbackInner() {
         user = data.user;
       }
 
+      // خزّن user_id محليًا فورًا — قبل أي فحص لـ profile
+      if (typeof window !== "undefined") {
+        localStorage.setItem(KEYS.userId, user.id);
+      }
+
       const { data: profile } = await sb
         .from("profiles").select("id, client_id").eq("id", user.id).maybeSingle() as any;
 
@@ -54,7 +59,6 @@ function CallbackInner() {
           if (profile.client_id) {
             localStorage.setItem(KEYS.clientId, profile.client_id);
           }
-          localStorage.setItem(KEYS.userId, user.id);
         }
         router.replace("/");
       } else {
