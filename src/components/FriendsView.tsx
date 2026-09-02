@@ -11,6 +11,7 @@ interface Friend {
   status: string;
   initiator: string;
   balance: number;
+  relationship: string;
 }
 
 interface PendingDebt {
@@ -51,6 +52,9 @@ export default function FriendsView() {
   const [pinErr, setPinErr] = useState("");
   const [pinVerifying, setPinVerifying] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: "debt" | "settlement"; id: string; accept: boolean } | null>(null);
+  const [showRelation, setShowRelation] = useState(false);
+  const [relationType, setRelationType] = useState("");
+  const [relationForShip, setRelationForShip] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -70,7 +74,7 @@ export default function FriendsView() {
     if (!sb) return;
     const { data: ships } = await sb
       .from("friendships")
-      .select("id, user_a, user_b, status, initiator")
+      .select("id, user_a, user_b, status, initiator, relationship_type")
       .or("user_a.eq." + userId + ",user_b.eq." + userId);
     if (!ships || ships.length === 0) { setFriends([]); return; }
     const friendList: Friend[] = [];
@@ -82,6 +86,7 @@ export default function FriendsView() {
         friendship_id: ship.id, friend_id: friendId,
         friend_phone: profile?.phone || "غير معروف",
         status: ship.status, initiator: ship.initiator, balance,
+        relationship: ship.relationship_type || "friend",
       });
     }
     setFriends(friendList);
@@ -179,7 +184,37 @@ export default function FriendsView() {
     await sb.from("friendships")
       .update({ status: accept ? "accepted" : "blocked", updated_at: new Date().toISOString() })
       .eq("id", shipId);
+    if (accept) {
+      // اسأل عن نوع العلاقة
+      setRelationForShip(shipId);
+      setRelationType("");
+      setShowRelation(true);
+    }
     await load();
+  }
+
+  async function setRelationship() {
+    if (!relationType || !relationForShip) return;
+    const sb = getSupabase();
+    if (!sb) return;
+    await sb.from("friendships")
+      .update({ relationship_type: relationType })
+      .eq("id", relationForShip);
+    setShowRelation(false);
+    setRelationForShip(null);
+    setRelationType("");
+    await load();
+  }
+
+  function getRelationLabel(type: string): string {
+    const labels: Record<string, string> = {
+      friend: "صديق",
+      employer: "صاحب عمل",
+      colleague: "أعمل مع",
+      partner: "شريك",
+      client: "عميل",
+    };
+    return labels[type] || "صديق";
   }
 
   async function respondDebt(debtId: string, accept: boolean) {
@@ -302,6 +337,7 @@ export default function FriendsView() {
               </div>
               <div>
                 <div className="text-base font-bold">{selectedFriend.friend_phone}</div>
+                <div className="text-xs text-gray-400 mb-0.5">{getRelationLabel(selectedFriend.relationship)}</div>
                 <div className={"text-sm " + (selectedFriend.balance > 0 ? "text-green-500" : selectedFriend.balance < 0 ? "text-red-400" : "text-gray-400")}>
                   {selectedFriend.balance > 0 ? "لك " + selectedFriend.balance + " جنيه" : selectedFriend.balance < 0 ? "عليك " + Math.abs(selectedFriend.balance) + " جنيه" : "الحساب مسوّى"}
                 </div>
@@ -498,6 +534,7 @@ export default function FriendsView() {
                 </div>
                 <div>
                   <div className="text-sm font-bold">{f.friend_phone}</div>
+                  <div className="text-[10px] text-gray-300">{getRelationLabel(f.relationship)}</div>
                   <div className={"text-xs " + (f.balance > 0 ? "text-green-500" : f.balance < 0 ? "text-red-400" : "text-gray-400")}>
                     {f.balance > 0 ? "لك " + f.balance + " جنيه" : f.balance < 0 ? "عليك " + Math.abs(f.balance) + " جنيه" : "مسوّى"}
                   </div>
@@ -522,6 +559,35 @@ export default function FriendsView() {
               {adding ? "جاري الإضافة..." : "إرسال طلب صداقة"}
             </button>
             <button onClick={() => setShowAdd(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+          </div>
+        </div>
+      )}
+
+      {showRelation && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowRelation(false)}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-center mb-1">ما طبيعة علاقتك؟</h3>
+            <p className="text-xs text-gray-400 text-center mb-4">ده يساعدنا نفهم حساباتك أحسن</p>
+            <div className="space-y-2">
+              {[
+                { value: "friend", label: "صديق", emoji: "🤝" },
+                { value: "employer", label: "صاحب عمل", emoji: "💼" },
+                { value: "colleague", label: "أعمل مع", emoji: "👥" },
+                { value: "partner", label: "شريك", emoji: "🤝" },
+                { value: "client", label: "عميل", emoji: "📋" },
+              ].map((opt) => (
+                <button key={opt.value} onClick={() => setRelationType(opt.value)}
+                  className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
+                  <span className="text-xl">{opt.emoji}</span>
+                  <span className="text-sm font-bold">{opt.label}</span>
+                  {relationType === opt.value && <Check size={16} className="text-[var(--accent)] mr-auto" />}
+                </button>
+              ))}
+            </div>
+            <button onClick={setRelationship} disabled={!relationType}
+              className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm mt-4">
+              تأكيد
+            </button>
           </div>
         </div>
       )}
