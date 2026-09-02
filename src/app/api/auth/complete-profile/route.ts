@@ -37,13 +37,24 @@ export async function POST(req: NextRequest) {
   // معرف العميل — فريد لكل مستخدم
   const clientId = crypto.randomUUID();
 
-  // أنشئ الملف
+  // أنشئ الملف (مع client_id)
   const { error } = await admin.from("profiles").insert({
     id: user.id, email: user.email, phone,
     pin_hash: pinHash, email_verified: true,
     failed_attempts: 0, locked_until: null,
     client_id: clientId,
   });
+
+  // لو فشل بسبب عدم وجود عمود client_id → أعد المحاولة بدونه
+  if (error && error.message?.includes("client_id")) {
+    const { error: err2 } = await admin.from("profiles").insert({
+      id: user.id, email: user.email, phone,
+      pin_hash: pinHash, email_verified: true,
+      failed_attempts: 0, locked_until: null,
+    });
+    if (err2) return NextResponse.json({ error: "تعذر حفظ البيانات" }, { status: 500 });
+    return NextResponse.json({ ok: true, message: "تم ربط البيانات" });
+  }
 
   if (error) return NextResponse.json({ error: "تعذر حفظ البيانات" }, { status: 500 });
   return NextResponse.json({ ok: true, message: "تم ربط البيانات", clientId });
