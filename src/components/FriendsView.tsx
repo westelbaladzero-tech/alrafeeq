@@ -64,6 +64,15 @@ export default function FriendsView() {
   const [isInstallment, setIsInstallment] = useState(false);
   const [totalInstallments, setTotalInstallments] = useState("");
   const [installmentStart, setInstallmentStart] = useState("");
+  const [confirmedDebts, setConfirmedDebts] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [toast, setToast] = useState("");
+  const [showChangeRelation, setShowChangeRelation] = useState(false);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2500);
+  }
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -170,6 +179,67 @@ export default function FriendsView() {
     setPendingSetts(all);
   }
 
+  async function loadFriendDetails(me: string, friendId: string) {
+    const sb = getSupabase() as any;
+    if (!sb) return;
+
+    // الديون المؤكدة (للأقساط)
+    const { data: debts } = await sb.from("debt_requests")
+      .select("id, amount, description, is_installment, total_installments, installment_amount, paid_installments, start_date, created_at, creditor, debtor, status")
+      .or("creditor.eq." + me + ",debtor.eq." + friendId)
+      .eq("status", "confirmed")
+      .order("created_at", { ascending: false });
+
+    // التسويات المؤكدة
+    const { data: setts } = await sb.from("settlements")
+      .select("id, amount, description, from_user, to_user, created_at, status")
+      .or("from_user.eq." + me + ",to_user.eq." + me)
+      .eq("status", "confirmed")
+      .order("created_at", { ascending: false });
+
+    // فلتر المعاملات بيني وبين هذا الصديق فقط
+    const friendSetts = (setts || []).filter((s: any) =>
+      (s.from_user === me && s.to_user === friendId) ||
+      (s.to_user === me && s.from_user === friendId)
+    );
+
+    const friendDebts = (debts || []).filter((d: any) =>
+      (d.creditor === me && d.debtor === friendId) ||
+      (d.debtor === me && d.creditor === friendId)
+    );
+
+    setConfirmedDebts(friendDebts);
+
+    // ادمج الديون والتسويات في سجل واحد مرتب
+    const allTx: any[] = [];
+    for (const d of friendDebts) {
+      allTx.push({
+        type: "debt",
+        id: d.id,
+        amount: Number(d.amount),
+        description: d.description || "",
+        date: d.created_at,
+        direction: d.creditor === me ? "owed" : "owe",
+        is_installment: d.is_installment,
+        total_installments: d.total_installments,
+        installment_amount: d.installment_amount ? Number(d.installment_amount) : null,
+        paid_installments: d.paid_installments || 0,
+      });
+    }
+    for (const s of friendSetts) {
+      allTx.push({
+        type: "settlement",
+        id: s.id,
+        amount: Number(s.amount),
+        description: s.description || "",
+        date: s.created_at,
+        direction: s.from_user === me ? "paid" : "received",
+      });
+    }
+    allTx.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setTransactions(allTx);
+  }
+
   async function addFriend() {
     setErr("");
     if (!phoneInput || !uid) return;
@@ -195,6 +265,7 @@ export default function FriendsView() {
       });
       if (error) { setErr("تعذّر إضافة الصديق"); setAdding(false); return; }
       setPhoneInput(""); setShowAdd(false); await load();
+      showToast("تم إرسال طلب الصداقة");
     } catch { setErr("خطأ في الاتصال"); }
     setAdding(false);
   }
@@ -251,6 +322,7 @@ export default function FriendsView() {
         .update({ status: "rejected", confirmed_at: new Date().toISOString() })
         .eq("id", debtId);
       await load();
+      showToast("تم رفض الدين");
     }
   }
 
@@ -267,6 +339,7 @@ export default function FriendsView() {
         .update({ status: "rejected", confirmed_at: new Date().toISOString() })
         .eq("id", settId);
       await load();
+      showToast("تم رفض التسوية");
     }
   }
 
@@ -347,6 +420,7 @@ export default function FriendsView() {
       setPinInput("");
       setPendingAction(null);
       await load();
+      showToast(pendingAction.accept ? (pendingAction.type === "debt" ? "تم تأكيد الدين" : "تم تأكيد التسوية") : "تم الرفض");
     } catch {
       setPinErr("خطأ في الاتصال");
     }
@@ -385,6 +459,7 @@ export default function FriendsView() {
     if (error) { setActionErr("تعذّر إرسال الطلب"); setSubmitting(false); return; }
     setDebtAmount(""); setDebtDesc(""); setIsInstallment(false); setTotalInstallments(""); setInstallmentStart("");
     setShowDebt(false); await load();
+    showToast("تم إرسال طلب الدين");
     setSubmitting(false);
   }
 
@@ -406,6 +481,7 @@ export default function FriendsView() {
     });
     if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
     setSettleAmount(""); setSettleDesc(""); setShowSettle(false); await load();
+    showToast("تم إرسال طلب التسوية");
     setSubmitting(false);
   }
 
@@ -427,9 +503,13 @@ export default function FriendsView() {
               <div className="w-12 h-12 rounded-full bg-[var(--soft)] flex items-center justify-center">
                 <Wallet size={22} className="text-[var(--accent)]" />
               </div>
-              <div>
+              <div className="flex-1">
                 <div className="text-base font-bold">{selectedFriend.friend_phone}</div>
-                <div className="text-xs text-gray-400 mb-0.5">{getRelationLabel(selectedFriend.relationship)}</div>
+                <button onClick={() => { setRelationForShip(selectedFriend.friendship_id); setRelationType(selectedFriend.relationship); setShowChangeRelation(true); }}
+                  className="text-xs text-gray-400 hover:text-[var(--accent)] flex items-center gap-1 mb-0.5">
+                  {getRelationLabel(selectedFriend.relationship)}
+                  <span className="text-[9px]">✎</span>
+                </button>
                 <div className={"text-sm " + (selectedFriend.balance > 0 ? "text-green-500" : selectedFriend.balance < 0 ? "text-red-400" : "text-gray-400")}>
                   {selectedFriend.balance > 0 ? "لك " + selectedFriend.balance + " جنيه" : selectedFriend.balance < 0 ? "عليك " + Math.abs(selectedFriend.balance) + " جنيه" : "الحساب مسوّى"}
                 </div>
@@ -480,6 +560,63 @@ export default function FriendsView() {
                     <div className="text-sm font-bold">دفعت {s.amount} جنيه</div>
                     <span className="text-xs text-gray-400">بانتظار التأكيد</span>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* تقدم الأقساط */}
+          {confirmedDebts.filter((d) => d.is_installment).length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">تقدم الأقساط</h3>
+              {confirmedDebts.filter((d) => d.is_installment).map((d) => {
+                const paid = d.paid_installments || 0;
+                const total = d.total_installments || 0;
+                const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                return (
+                  <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
+                    <div className="flex justify-between items-center mb-1">
+                      <div className="text-sm font-bold">{Number(d.amount)} جنيه</div>
+                      <div className="text-xs text-gray-400">{paid}/{total} قسط</div>
+                    </div>
+                    {d.description && <div className="text-xs text-gray-400 mb-1">{d.description}</div>}
+                    <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                      <div className="bg-[var(--accent)] rounded-full h-2 transition-all" style={{ width: pct + "%" }} />
+                    </div>
+                    <div className="text-[10px] text-gray-400">
+                      كل قسط: {d.installment_amount ? Number(d.installment_amount) : 0} جنيه
+                      {d.start_date && " • بدأ: " + new Date(d.start_date).toLocaleDateString("ar-EG")}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* سجل المعاملات */}
+          {transactions.length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">سجل المعاملات</h3>
+              {transactions.slice(0, 20).map((t) => (
+                <div key={t.type + t.id} className="bg-white rounded-xl p-2.5 mb-1.5 border border-[var(--soft)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={"w-8 h-8 rounded-lg flex items-center justify-center " + (t.direction === "owed" || t.direction === "received" ? "bg-green-50" : "bg-red-50")}>
+                      {t.direction === "owed" ? <HandCoins size={14} className="text-green-500" /> :
+                       t.direction === "owe" ? <HandCoins size={14} className="text-red-400" /> :
+                       t.direction === "paid" ? <Banknote size={14} className="text-red-400" /> :
+                       <Banknote size={14} className="text-green-500" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold">
+                        {t.direction === "owed" ? "لك" : t.direction === "owe" ? "عليك" : t.direction === "paid" ? "دفعت" : "استلمت"} {t.amount} جنيه
+                      </div>
+                      {t.description && <div className="text-[10px] text-gray-400">{t.description}</div>}
+                      {t.is_installment && t.total_installments && (
+                        <div className="text-[10px] text-green-600">{t.paid_installments}/{t.total_installments} قسط</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-gray-300">{new Date(t.date).toLocaleDateString("ar-EG")}</div>
                 </div>
               ))}
             </div>
@@ -661,7 +798,10 @@ export default function FriendsView() {
           </div>
         ) : (
           friends.filter((f) => f.status === "accepted").map((f) => (
-            <button key={f.friendship_id} onClick={() => setSelectedFriend(f)}
+            <button key={f.friendship_id} onClick={() => {
+              setSelectedFriend(f);
+              getResolvedUserId().then((myId) => { if (myId) loadFriendDetails(myId, f.friend_id); });
+            }}
               className="w-full bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[var(--soft)] flex items-center justify-center">
@@ -748,6 +888,56 @@ export default function FriendsView() {
             <button onClick={() => { setShowPin(false); setPinInput(""); setPinErr(""); setPendingAction(null); }}
               className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
           </div>
+        </div>
+      )}
+
+      {/* مودال تغيير العلاقة */}
+      {showChangeRelation && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowChangeRelation(false)}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-center mb-1">غيّر نوع العلاقة</h3>
+            <p className="text-xs text-gray-400 text-center mb-4">النوع الحالي: {getRelationLabel(relationType)}</p>
+            <div className="space-y-2">
+              {[
+                { value: "friend", label: "صديق", emoji: "🤝" },
+                { value: "employer", label: "صاحب عمل", emoji: "💼" },
+                { value: "colleague", label: "أعمل مع", emoji: "👥" },
+                { value: "partner", label: "شريك", emoji: "🤝" },
+                { value: "client", label: "عميل", emoji: "📋" },
+              ].map((opt) => (
+                <button key={opt.value} onClick={() => setRelationType(opt.value)}
+                  className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
+                  <span className="text-xl">{opt.emoji}</span>
+                  <span className="text-sm font-bold">{opt.label}</span>
+                  {relationType === opt.value && <Check size={16} className="text-[var(--accent)] mr-auto" />}
+                </button>
+              ))}
+            </div>
+            <button onClick={async () => {
+              if (relationType && relationForShip) {
+                const sb = getSupabase() as any;
+                if (sb) {
+                  await sb.from("friendships").update({ relationship_type: relationType }).eq("id", relationForShip);
+                  showToast("تم تحديث العلاقة");
+                  setShowChangeRelation(false);
+                  setRelationForShip(null);
+                  if (selectedFriend) {
+                    setSelectedFriend({ ...selectedFriend, relationship: relationType });
+                  }
+                  await load();
+                }
+              }
+            }} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold text-sm mt-4">
+              حفظ
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[var(--accent-dark)] text-white text-sm px-5 py-2.5 rounded-full shadow-lg animate-fade-in">
+          {toast}
         </div>
       )}
     </div>
