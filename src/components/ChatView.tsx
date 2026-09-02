@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X, Paperclip } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { isOnline, addToQueue } from "@/lib/sync";
+import { saveLearnedResponse, tryOfflineReply } from "@/lib/learned-responses";
 
 const OLD_STORAGE_KEY = "alrafeeq_chat_history";
 const STORAGE_PREFIX = "alrafeeq_chat_history_";
@@ -272,6 +273,28 @@ export default function ChatView() {
     setTyping(true);
     await saveCloudMessage(userMsg);
 
+    // ─── أوفلاين: جرب الرد المحلي ───
+    if (!isOnline()) {
+      const uid = userIdRef.current;
+      if (uid) {
+        const offlineReply = tryOfflineReply(uid, text);
+        if (offlineReply) {
+          const botMsg = { role: "bot" as const, text: offlineReply };
+          setTyping(false);
+          setMessages(m => [...m, botMsg]);
+          await saveCloudMessage(botMsg);
+          return;
+        }
+      }
+      // لا يمكن الرد أوفلاين — خيار 4
+      const offlineMsg = { role: "bot" as const, text: "🌿 لا أقدر أرد دلوقتي — محتاج اتصال بالإنترنت للتحليل.\nرسالتك محفوظة وهرد عليها فور ما يرجع النت ✅" };
+      setTyping(false);
+      setMessages(m => [...m, offlineMsg]);
+      await saveCloudMessage(offlineMsg);
+      return;
+    }
+
+    // ─── أونلاين: أرسل للرفيق ───
     try {
       const sb = getSupabase();
       const sessionRes = sb ? await sb.auth.getSession() : null;
@@ -286,6 +309,10 @@ export default function ChatView() {
       setTyping(false);
       setMessages(m => [...m, botMsg]);
       await saveCloudMessage(botMsg);
+
+      // تعلّم الرد للمرة القادمة (أوفلاين)
+      const uid = userIdRef.current;
+      if (uid) saveLearnedResponse(uid, text, data.reply || "");
     } catch {
       const botMsg = { role: "bot" as const, text: "صار خطأ بسيط، جرّب مرة ثانية 🙏" };
       setTyping(false);
