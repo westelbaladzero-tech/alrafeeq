@@ -3,10 +3,37 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X, Paperclip } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 
-const STORAGE_KEY = "alrafeeq_chat_history";
+const OLD_STORAGE_KEY = "alrafeeq_chat_history";
+const STORAGE_PREFIX = "alrafeeq_chat_history_";
 const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. قبل ما نبدأ، تحب أناديك بإيه؟";
 
 interface Msg { role: "bot" | "user"; text: string }
+
+async function getUserId(): Promise<string | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data: userData } = await sb.auth.getUser();
+  return userData.user?.id || null;
+}
+
+function getLocalMessages(userId: string): Msg[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(STORAGE_PREFIX + userId);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalMessages(userId: string, msgs: Msg[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_PREFIX + userId, JSON.stringify(msgs));
+  } catch {}
+}
 
 async function transcribeAudio(blob: Blob): Promise<string> {
   const formData = new FormData();
@@ -17,29 +44,14 @@ async function transcribeAudio(blob: Blob): Promise<string> {
   return data.transcript || "";
 }
 
-function getLocalMessages(): Msg[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return [];
-    const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-async function getCloudMessages(): Promise<Msg[] | null> {
+async function getCloudMessages(userId: string): Promise<Msg[] | null> {
   const sb = getSupabase();
   if (!sb) return null;
-  const { data: userData } = await sb.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) return null;
 
   const { data, error } = await sb
     .from("chat_messages")
     .select("role,text,created_at")
-    .eq("user_id", uid)
+    .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
   if (error || !data) return null;
@@ -62,23 +74,6 @@ async function saveCloudMessage(msg: Msg) {
   return !error;
 }
 
-async function saveCloudMessages(msgs: Msg[]) {
-  const sb = getSupabase();
-  if (!sb || msgs.length === 0) return false;
-  const { data: userData } = await sb.auth.getUser();
-  const uid = userData.user?.id;
-  if (!uid) return false;
-
-  const rows = msgs.map((msg) => ({
-    user_id: uid,
-    role: msg.role,
-    text: msg.text,
-  }));
-
-  const { error } = await (sb.from("chat_messages") as any).insert(rows);
-  return !error;
-}
-
 export default function ChatView() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -95,6 +90,7 @@ export default function ChatView() {
   const chunksRef = useRef<BlobPart[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const userIdRef = useRef<string | null>(null);
 
   // تنظيف الميكروفون عند الخروج
   useEffect(() => {
@@ -107,27 +103,36 @@ export default function ChatView() {
     let cancelled = false;
 
     async function loadMessages() {
-      const cloudMessages = await getCloudMessages();
+      const uid = await getUserId();
+      if (cancelled || !uid) return;
+      userIdRef.current = uid;
+
+      // تنظيف المفتاح القديم المشترك (ترحيل هادئ)
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(OLD_STORAGE_KEY);
+      }
+
+      // 1) محلي أولًا (مفتاح خاص بالمستخدم)
+      const localMessages = getLocalMessages(uid);
+      if (localMessages.length > 0) {
+        setMessages(localMessages);
+        return;
+      }
+
+      // 2) السحابة كنسخة احتياطية
+      const cloudMessages = await getCloudMessages(uid);
       if (cancelled) return;
 
       if (cloudMessages && cloudMessages.length > 0) {
         setMessages(cloudMessages);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudMessages));
-        }
+        saveLocalMessages(uid, cloudMessages);
         return;
       }
 
-      const localMessages = getLocalMessages();
-      if (localMessages.length > 0) {
-        setMessages(localMessages);
-        await saveCloudMessages(localMessages);
-        return;
-      }
-
+      // 3) مستخدم جديد — رسالة ترحيب
       const welcomeMessages = [{ role: "bot" as const, text: WELCOME }];
       setMessages(welcomeMessages);
-      await saveCloudMessages(welcomeMessages);
+      await saveCloudMessage(welcomeMessages[0]);
     }
 
     loadMessages();
@@ -136,7 +141,9 @@ export default function ChatView() {
 
   useEffect(() => {
     if (typeof window === "undefined" || messages.length === 0) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    if (userIdRef.current) {
+      saveLocalMessages(userIdRef.current, messages);
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
