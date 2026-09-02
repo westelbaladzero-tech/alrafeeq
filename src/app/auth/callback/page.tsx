@@ -2,6 +2,7 @@
 import { useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
+import { KEYS } from "@/lib/keys";
 
 function CallbackInner() {
   const params = useSearchParams();
@@ -51,9 +52,9 @@ function CallbackInner() {
         // خزّن client_id و user_id محليًا
         if (typeof window !== "undefined") {
           if (profile.client_id) {
-            localStorage.setItem("alrafeeq_client_id", profile.client_id);
+            localStorage.setItem(KEYS.clientId, profile.client_id);
           }
-          localStorage.setItem("alrafeeq_user_id", user.id);
+          localStorage.setItem(KEYS.userId, user.id);
         }
         router.replace("/");
       } else {
