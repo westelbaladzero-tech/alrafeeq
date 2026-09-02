@@ -20,6 +20,11 @@ interface PendingDebt {
   description: string;
   you_are: "creditor" | "debtor";
   created_at: string;
+  is_installment: boolean;
+  total_installments: number | null;
+  installment_amount: number | null;
+  paid_installments: number | null;
+  start_date: string | null;
 }
 
 interface PendingSettlement {
@@ -45,6 +50,7 @@ export default function FriendsView() {
   const [debtAmount, setDebtAmount] = useState("");
   const [debtDesc, setDebtDesc] = useState("");
   const [settleAmount, setSettleAmount] = useState("");
+  const [settleDesc, setSettleDesc] = useState("");
   const [actionErr, setActionErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -59,7 +65,11 @@ export default function FriendsView() {
   const [totalInstallments, setTotalInstallments] = useState("");
   const [installmentStart, setInstallmentStart] = useState("");
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 15000); // تحديث كل 15 ثانية
+    return () => clearInterval(interval);
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -115,10 +125,10 @@ export default function FriendsView() {
     const sb = getSupabase() as any;
     if (!sb) return;
     const { data: owed } = await sb.from("debt_requests")
-      .select("id, amount, description, creditor, debtor, created_at")
+      .select("id, amount, description, creditor, debtor, created_at, is_installment, total_installments, installment_amount, paid_installments, start_date")
       .eq("creditor", userId).eq("status", "pending");
     const { data: owe } = await sb.from("debt_requests")
-      .select("id, amount, description, creditor, debtor, created_at")
+      .select("id, amount, description, creditor, debtor, created_at, is_installment, total_installments, installment_amount, paid_installments, start_date")
       .eq("debtor", userId).eq("status", "pending");
     const all: PendingDebt[] = [];
     for (const d of [...(owed || []), ...(owe || [])]) {
@@ -127,6 +137,11 @@ export default function FriendsView() {
         description: d.description || "",
         you_are: d.creditor === userId ? "creditor" : "debtor",
         created_at: d.created_at,
+        is_installment: d.is_installment || false,
+        total_installments: d.total_installments || null,
+        installment_amount: d.installment_amount ? Number(d.installment_amount) : null,
+        paid_installments: d.paid_installments || 0,
+        start_date: d.start_date || null,
       });
     }
     setPendingDebts(all);
@@ -266,6 +281,42 @@ export default function FriendsView() {
           await sb2.from(table)
             .update({ status, confirmed_at: new Date().toISOString() })
             .eq("id", pendingAction.id);
+
+          // لو تأكيد تسوية ← حدّث paid_installments لو الدين أقساط
+          if (pendingAction.type === "settlement" && pendingAction.accept) {
+            const { data: sett } = await sb2.from("settlements")
+              .select("from_user, to_user, amount")
+              .eq("id", pendingAction.id).maybeSingle();
+            if (sett) {
+              // من يدفع لمن: from_user (المدين) → to_user (الدائن)
+              // ابحث عن دين أقساط حيث الدائن = to_user والمدين = from_user
+              const { data: debts } = await sb2.from("debt_requests")
+                .select("id, paid_installments, total_installments, installment_amount")
+                .eq("creditor", sett.to_user)
+                .eq("debtor", sett.from_user)
+                .eq("is_installment", true)
+                .eq("status", "confirmed")
+                .order("created_at", { ascending: false });
+              if (debts && debts.length > 0) {
+                // لو مبلغ التسوية = قسط واحد ← زيد بنسبة قسط واحد
+                const debt = debts[0];
+                const total = debt.total_installments || 0;
+                const currentPaid = debt.paid_installments || 0;
+                if (currentPaid < total) {
+                  // احسب عدد الأقساط اللي بيسددها المبلغ
+                  const instAmt = Number(debt.installment_amount) || 0;
+                  let inc = 1;
+                  if (instAmt > 0) {
+                    inc = Math.min(Math.round(Number(sett.amount) / instAmt), total - currentPaid);
+                    if (inc < 1) inc = 1;
+                  }
+                  await sb2.from("debt_requests")
+                    .update({ paid_installments: currentPaid + inc })
+                    .eq("id", debt.id);
+                }
+              }
+            }
+          }
         }
       }
 
@@ -327,10 +378,11 @@ export default function FriendsView() {
       to_user: selectedFriend.friend_id,
       friendship_id: selectedFriend.friendship_id,
       amount: amt,
+      description: settleDesc || null,
       status: "pending",
     });
     if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
-    setSettleAmount(""); setShowSettle(false); await load();
+    setSettleAmount(""); setSettleDesc(""); setShowSettle(false); await load();
     setSubmitting(false);
   }
 
@@ -385,6 +437,12 @@ export default function FriendsView() {
                     <span className="text-xs text-gray-400">بانتظار الموافقة</span>
                   </div>
                   {d.description && <div className="text-xs text-gray-400 mt-1">{d.description}</div>}
+                  {d.is_installment && d.total_installments && (
+                    <div className="text-[10px] text-green-600 mt-1 bg-green-50 rounded-lg px-2 py-1">
+                      أقساط: {d.total_installments} × {d.installment_amount} جنيه
+                      {d.start_date && " • يبدأ من " + new Date(d.start_date).toLocaleDateString("ar-EG")}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -462,6 +520,9 @@ export default function FriendsView() {
               <p className="text-xs text-gray-400 mb-4">دفعت مبلغ لـ {selectedFriend.friend_phone}</p>
               <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
                 placeholder="المبلغ بالجنيه" required
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
+              <input type="text" value={settleDesc} onChange={(e) => setSettleDesc(e.target.value)}
+                placeholder="وصف الدفعة (اختياري)"
                 className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
               {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
               <button onClick={sendSettlement} disabled={submitting}
@@ -531,6 +592,13 @@ export default function FriendsView() {
                   </div>
                 </div>
                 {d.description && <div className="text-xs text-gray-400">{d.description}</div>}
+                {d.is_installment && d.total_installments && (
+                  <div className="text-[10px] text-green-600 mt-1 bg-green-50 rounded-lg px-2 py-1">
+                    أقساط: {d.total_installments} × {d.installment_amount} جنيه
+                    {d.paid_installments ? " • مسدّد " + d.paid_installments + "/" + d.total_installments : ""}
+                    {d.start_date && " • يبدأ من " + new Date(d.start_date).toLocaleDateString("ar-EG")}
+                  </div>
+                )}
               </div>
             ))}
           </div>
