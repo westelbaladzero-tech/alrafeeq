@@ -1,10 +1,11 @@
 // @ts-nocheck
-// طبقة التخزين: Supabase عند توفّرها، localStorage كافتراضي
+// طبقة التخزين: محلي أولًا (خاص بكل مستخدم) ثم سحابة كنسخة احتياطية
 
 import type { Transaction } from './types';
 import { isSupabaseEnabled, getSupabase } from './supabase';
 
-const STORAGE_KEY = 'alrafeeq_transactions';
+const OLD_STORAGE_KEY = 'alrafeeq_transactions';
+const STORAGE_PREFIX = 'alrafeeq_transactions_';
 
 export function genId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -12,7 +13,7 @@ export function genId(): string {
     : `tx_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-async function userId(): Promise<string | null> {
+async function getUserId(): Promise<string | null> {
   if (!isSupabaseEnabled) return null;
   const sb = getSupabase();
   if (!sb) return null;
@@ -20,30 +21,58 @@ async function userId(): Promise<string | null> {
   return data.user?.id || null;
 }
 
-export async function getTransactions(): Promise<Transaction[]> {
-  if (isSupabaseEnabled) {
-    const sb = getSupabase();
-    if (sb) {
-      const uid = await userId();
-      let query = sb.from('transactions').select('*').order('created_at', { ascending: false });
-      if (uid) query = query.eq('user_id', uid);
-      const { data, error } = await query;
-      if (!error && data) return data.map(rowToTx);
-    }
-  }
-  return getLocal();
-}
-
-function getLocal(): Transaction[] {
+function getLocal(uid: string): Transaction[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_PREFIX + uid);
     if (!raw) return [];
     const arr = JSON.parse(raw) as Transaction[];
     return Array.isArray(arr) ? arr.sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     ) : [];
   } catch { return []; }
+}
+
+function saveLocal(uid: string, txs: Transaction[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_PREFIX + uid, JSON.stringify(txs));
+  } catch {}
+}
+
+export async function getTransactions(): Promise<Transaction[]> {
+  const uid = await getUserId();
+
+  // تنظيف المفتاح القديم المشترك (ترحيل هادئ)
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(OLD_STORAGE_KEY);
+  }
+
+  // 1) محلي أولًا (مفتاح خاص بالمستخدم)
+  if (uid) {
+    const local = getLocal(uid);
+    if (local.length > 0) return local;
+  }
+
+  // 2) السحابة كنسخة احتياطية
+  if (isSupabaseEnabled && uid) {
+    const sb = getSupabase();
+    if (sb) {
+      const { data, error } = await sb
+        .from('transactions')
+        .select('*')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        const txs = data.map(rowToTx);
+        saveLocal(uid, txs);
+        return txs;
+      }
+    }
+  }
+
+  // 3) لا توجد بيانات
+  return [];
 }
 
 function rowToTx(row: any): Transaction {
@@ -61,10 +90,11 @@ function rowToTx(row: any): Transaction {
 }
 
 export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>): Promise<Transaction> {
-  if (isSupabaseEnabled) {
+  const uid = await getUserId();
+
+  if (isSupabaseEnabled && uid) {
     const sb = getSupabase();
     if (sb) {
-      const uid = await userId();
       const { data, error } = await sb.from('transactions').insert({
         user_id: uid,
         type: tx.type,
@@ -74,26 +104,48 @@ export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>):
         method: tx.method,
         note: tx.note,
       }).select().single();
-      if (!error && data) return rowToTx(data);
+      if (!error && data) {
+        const newTx = rowToTx(data);
+        if (typeof window !== 'undefined') {
+          const all = getLocal(uid);
+          all.unshift(newTx);
+          saveLocal(uid, all);
+        }
+        return newTx;
+      }
     }
   }
+
   const full: Transaction = { ...tx, id: genId(), createdAt: new Date().toISOString() };
-  const all = getLocal();
-  all.push(full);
-  if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  if (uid && typeof window !== 'undefined') {
+    const all = getLocal(uid);
+    all.unshift(full);
+    saveLocal(uid, all);
+  }
   return full;
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  if (isSupabaseEnabled) {
+  const uid = await getUserId();
+
+  if (isSupabaseEnabled && uid) {
     const sb = getSupabase();
     if (sb) {
       const { error } = await sb.from('transactions').delete().eq('id', id);
-      if (!error) return;
+      if (!error) {
+        if (typeof window !== 'undefined') {
+          const all = getLocal(uid).filter(t => t.id !== id);
+          saveLocal(uid, all);
+        }
+        return;
+      }
     }
   }
-  const all = getLocal().filter(t => t.id !== id);
-  if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+
+  if (uid && typeof window !== 'undefined') {
+    const all = getLocal(uid).filter(t => t.id !== id);
+    saveLocal(uid, all);
+  }
 }
 
 export async function getStats() {
