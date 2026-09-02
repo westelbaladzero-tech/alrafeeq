@@ -1,7 +1,8 @@
 // @ts-nocheck
 // ذاكرة الردود المتعلمة — تنضج مع الوقت
 
-const LEARNED_PREFIX = "alrafeeq_learned_responses_";
+import { KEYS } from "./keys";
+
 const MAX_RESPONSES = 200;
 const MATCH_THRESHOLD = 0.3;
 
@@ -68,7 +69,7 @@ export function saveLearnedResponse(uid: string, question: string, answer: strin
       r.a = answer;
       r.used = 0;
       r.saved = new Date().toISOString();
-      localStorage.setItem(LEARNED_PREFIX + uid, JSON.stringify(responses));
+      localStorage.setItem(KEYS.learned(uid), JSON.stringify(responses));
       return;
     }
   }
@@ -88,13 +89,13 @@ export function saveLearnedResponse(uid: string, question: string, answer: strin
     responses.length = MAX_RESPONSES;
   }
 
-  localStorage.setItem(LEARNED_PREFIX + uid, JSON.stringify(responses));
+  localStorage.setItem(KEYS.learned(uid), JSON.stringify(responses));
 }
 
 export function getLearnedResponses(uid: string): LearnedResponse[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(LEARNED_PREFIX + uid);
+    const raw = localStorage.getItem(KEYS.learned(uid));
     if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
@@ -121,7 +122,7 @@ export function findLearnedResponse(uid: string, question: string): string | nul
 
   if (best && bestScore >= MATCH_THRESHOLD) {
     best.used++;
-    localStorage.setItem(LEARNED_PREFIX + uid, JSON.stringify(responses));
+    localStorage.setItem(KEYS.learned(uid), JSON.stringify(responses));
     return best.a;
   }
 
@@ -132,7 +133,7 @@ export function findLearnedResponse(uid: string, question: string): string | nul
 function getLocalTxStats(uid: string) {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem("alrafeeq_transactions_" + uid);
+    const raw = localStorage.getItem(KEYS.transactions(uid));
     if (!raw) return null;
     const txs = JSON.parse(raw);
     if (!Array.isArray(txs)) return null;

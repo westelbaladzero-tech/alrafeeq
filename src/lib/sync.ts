@@ -2,9 +2,7 @@
 // نظام المزامنة: طابور عمليات + كاشف اتصال + مزامنة تلقائية
 
 import { getSupabase, isSupabaseEnabled } from "./supabase";
-
-const QUEUE_PREFIX = "alrafeeq_sync_queue_";
-const LAST_SYNC_PREFIX = "alrafeeq_last_sync_";
+import { KEYS } from "./keys";
 
 export type OpType = "add_tx" | "delete_tx" | "add_message";
 
@@ -28,7 +26,7 @@ async function getUserId(): Promise<string | null> {
 function getQueue(uid: string): QueueItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(QUEUE_PREFIX + uid);
+    const raw = localStorage.getItem(queueKey(uid));
     if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
@@ -38,7 +36,7 @@ function getQueue(uid: string): QueueItem[] {
 function saveQueue(uid: string, items: QueueItem[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(QUEUE_PREFIX + uid, JSON.stringify(items));
+    localStorage.setItem(queueKey(uid), JSON.stringify(items));
   } catch {}
 }
 
@@ -92,6 +90,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
     try {
       if (item.op === "add_tx") {
         const { error } = await sb.from("transactions").insert({
+          id: item.data.localId,
           user_id: uid,
           type: item.data.type,
           amount: item.data.amount,
@@ -122,7 +121,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
   saveQueue(uid, remaining);
 
   // 2) اسحب الجديد من السحابة
-  const lastSync = localStorage.getItem(LAST_SYNC_PREFIX + uid) || "1970-01-01T00:00:00Z";
+  const lastSync = localStorage.getItem(lastSyncKey(uid)) || "1970-01-01T00:00:00Z";
 
   // معاملات جديدة
   try {
@@ -134,8 +133,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
       .order("created_at", { ascending: false });
 
     if (newTxs && newTxs.length > 0) {
-      const localKey = "alrafeeq_transactions_" + uid;
-      const raw = localStorage.getItem(localKey);
+      const raw = localStorage.getItem(txKey(uid));
       let local: any[] = [];
       try { local = raw ? JSON.parse(raw) : []; } catch {}
       const localIds = new Set(local.map((t: any) => t.id));
@@ -155,7 +153,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
           downloaded++;
         }
       }
-      localStorage.setItem(localKey, JSON.stringify(local));
+      localStorage.setItem(txKey(uid), JSON.stringify(local));
     }
   } catch {}
 
@@ -169,8 +167,7 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
       .order("created_at", { ascending: true });
 
     if (newMsgs && newMsgs.length > 0) {
-      const localKey = "alrafeeq_chat_history_" + uid;
-      const raw = localStorage.getItem(localKey);
+      const raw = localStorage.getItem(chatKey(uid));
       let local: any[] = [];
       try { local = raw ? JSON.parse(raw) : []; } catch {}
       const localSigs = new Set(local.map((m: any) => `${m.role}:${m.text}`));
@@ -181,12 +178,12 @@ export async function syncAll(): Promise<{ uploaded: number; downloaded: number;
           downloaded++;
         }
       }
-      localStorage.setItem(localKey, JSON.stringify(local));
+      localStorage.setItem(chatKey(uid), JSON.stringify(local));
     }
   } catch {}
 
   // 3) حدّث آخر مزامنة
-  localStorage.setItem(LAST_SYNC_PREFIX + uid, new Date().toISOString());
+  localStorage.setItem(lastSyncKey(uid), new Date().toISOString());
 
   // أبلغ المستمعين
   const pending = remaining.length;

@@ -4,9 +4,8 @@ import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X, Paperclip } from
 import { getSupabase } from "@/lib/supabase";
 import { isOnline, addToQueue } from "@/lib/sync";
 import { saveLearnedResponse, tryOfflineReply } from "@/lib/learned-responses";
+import { KEYS, cleanOldKeys } from "@/lib/keys";
 
-const OLD_STORAGE_KEY = "alrafeeq_chat_history";
-const STORAGE_PREFIX = "alrafeeq_chat_history_";
 const WELCOME = "أهلاً وسهلاً 👋 أنا الرفيق الأمين. قبل ما نبدأ، تحب أناديك بإيه؟";
 
 interface Msg { role: "bot" | "user"; text: string }
@@ -21,7 +20,7 @@ async function getUserId(): Promise<string | null> {
 function getLocalMessages(userId: string): Msg[] {
   if (typeof window === "undefined") return [];
   try {
-    const saved = localStorage.getItem(STORAGE_PREFIX + userId);
+    const saved = localStorage.getItem(KEYS.chat(userId));
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     return Array.isArray(parsed) ? parsed : [];
@@ -33,7 +32,7 @@ function getLocalMessages(userId: string): Msg[] {
 function saveLocalMessages(userId: string, msgs: Msg[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_PREFIX + userId, JSON.stringify(msgs));
+    localStorage.setItem(KEYS.chat(userId), JSON.stringify(msgs));
   } catch {}
 }
 
@@ -118,9 +117,9 @@ export default function ChatView() {
       if (cancelled || !uid) return;
       userIdRef.current = uid;
 
-      // تنظيف المفتاح القديم المشترك (ترحيل هادئ)
+      // تنظيف المفاتيح القديمة (مرة واحدة)
       if (typeof window !== "undefined") {
-        localStorage.removeItem(OLD_STORAGE_KEY);
+        cleanOldKeys();
       }
 
       // 1) محلي أولًا (مفتاح خاص بالمستخدم)

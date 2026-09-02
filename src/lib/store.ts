@@ -4,9 +4,9 @@
 import type { Transaction } from './types';
 import { isSupabaseEnabled, getSupabase } from './supabase';
 import { isOnline, addToQueue } from './sync';
+import { KEYS, cleanOldKeys } from './keys';
 
-const OLD_STORAGE_KEY = 'alrafeeq_transactions';
-const STORAGE_PREFIX = 'alrafeeq_transactions_';
+let oldKeyCleaned = false;
 
 export function genId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -25,7 +25,7 @@ async function getUserId(): Promise<string | null> {
 function getLocal(uid: string): Transaction[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + uid);
+    const raw = localStorage.getItem(KEYS.transactions(uid));
     if (!raw) return [];
     const arr = JSON.parse(raw) as Transaction[];
     return Array.isArray(arr) ? arr.sort((a, b) =>
@@ -37,16 +37,17 @@ function getLocal(uid: string): Transaction[] {
 function saveLocal(uid: string, txs: Transaction[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_PREFIX + uid, JSON.stringify(txs));
+    localStorage.setItem(KEYS.transactions(uid), JSON.stringify(txs));
   } catch {}
 }
 
 export async function getTransactions(): Promise<Transaction[]> {
   const uid = await getUserId();
 
-  // تنظيف المفتاح القديم المشترك (ترحيل هادئ)
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(OLD_STORAGE_KEY);
+  // تنظيف المفتاح القديم مرة واحدة فقط
+  if (!oldKeyCleaned && typeof window !== 'undefined') {
+    cleanOldKeys();
+    oldKeyCleaned = true;
   }
 
   // 1) محلي أولًا (مفتاح خاص بالمستخدم)
@@ -128,9 +129,9 @@ export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>):
     }
   }
 
-  // لو غير متصل → أضف للطابور
+  // لو غير متصل → أضف للطابور بالـ ID المحلي
   if (uid && !isOnline()) {
-    addToQueue(uid, 'add_tx', tx);
+    addToQueue(uid, 'add_tx', { ...tx, localId: full.id });
   }
 
   return full;
