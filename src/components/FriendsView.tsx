@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { UserPlus, Users, ArrowRight, Check, X, Wallet } from "lucide-react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
 
@@ -21,15 +21,31 @@ interface PendingDebt {
   created_at: string;
 }
 
+interface PendingSettlement {
+  id: string;
+  amount: number;
+  you_are: "sender" | "receiver";
+  created_at: string;
+}
+
 export default function FriendsView() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [pendingDebts, setPendingDebts] = useState<PendingDebt[]>([]);
+  const [pendingSetts, setPendingSetts] = useState<PendingSettlement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
   const [err, setErr] = useState("");
   const [adding, setAdding] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
+  const [showDebt, setShowDebt] = useState(false);
+  const [showSettle, setShowSettle] = useState(false);
+  const [debtAmount, setDebtAmount] = useState("");
+  const [debtDesc, setDebtDesc] = useState("");
+  const [settleAmount, setSettleAmount] = useState("");
+  const [actionErr, setActionErr] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -40,6 +56,7 @@ export default function FriendsView() {
     setUid(userId);
     await loadFriends(userId);
     await loadPendingDebts(userId);
+    await loadPendingSettlements(userId);
     setLoading(false);
   }
 
@@ -102,6 +119,26 @@ export default function FriendsView() {
     setPendingDebts(all);
   }
 
+  async function loadPendingSettlements(userId: string) {
+    const sb = getSupabase();
+    if (!sb) return;
+    const { data: sent } = await sb.from("settlements")
+      .select("id, amount, from_user, to_user, created_at")
+      .eq("from_user", userId).eq("status", "pending");
+    const { data: received } = await sb.from("settlements")
+      .select("id, amount, from_user, to_user, created_at")
+      .eq("to_user", userId).eq("status", "pending");
+    const all: PendingSettlement[] = [];
+    for (const s of [...(sent || []), ...(received || [])]) {
+      all.push({
+        id: s.id, amount: Number(s.amount),
+        you_are: s.from_user === userId ? "sender" : "receiver",
+        created_at: s.created_at,
+      });
+    }
+    setPendingSetts(all);
+  }
+
   async function addFriend() {
     setErr("");
     if (!phoneInput || !uid) return;
@@ -134,25 +171,186 @@ export default function FriendsView() {
   async function respondFriendship(shipId: string, accept: boolean) {
     const sb = getSupabase();
     if (!sb) return;
-    const { error } = await sb.from("friendships")
+    await sb.from("friendships")
       .update({ status: accept ? "accepted" : "blocked", updated_at: new Date().toISOString() })
       .eq("id", shipId);
-    if (!error) await load();
+    await load();
   }
 
   async function respondDebt(debtId: string, accept: boolean) {
     const sb = getSupabase();
     if (!sb) return;
-    const { error } = await sb.from("debt_requests")
+    await sb.from("debt_requests")
       .update({ status: accept ? "confirmed" : "rejected", confirmed_at: new Date().toISOString() })
       .eq("id", debtId);
-    if (!error) await load();
+    await load();
+  }
+
+  async function respondSettlement(settId: string, accept: boolean) {
+    const sb = getSupabase();
+    if (!sb) return;
+    await sb.from("settlements")
+      .update({ status: accept ? "confirmed" : "rejected", confirmed_at: new Date().toISOString() })
+      .eq("id", settId);
+    await load();
+  }
+
+  async function sendDebtRequest() {
+    setActionErr("");
+    if (!debtAmount || !uid || !selectedFriend) return;
+    const amt = Number(debtAmount);
+    if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
+    setSubmitting(true);
+    const sb = getSupabase();
+    if (!sb) { setSubmitting(false); return; }
+    const { error } = await sb.from("debt_requests").insert({
+      creditor: uid,
+      debtor: selectedFriend.friend_id,
+      friendship_id: selectedFriend.friendship_id,
+      amount: amt,
+      description: debtDesc || null,
+      status: "pending",
+    });
+    if (error) { setActionErr("تعذّر إرسال الطلب"); setSubmitting(false); return; }
+    setDebtAmount(""); setDebtDesc(""); setShowDebt(false); await load();
+    setSubmitting(false);
+  }
+
+  async function sendSettlement() {
+    setActionErr("");
+    if (!settleAmount || !uid || !selectedFriend) return;
+    const amt = Number(settleAmount);
+    if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
+    setSubmitting(true);
+    const sb = getSupabase();
+    if (!sb) { setSubmitting(false); return; }
+    const { error } = await sb.from("settlements").insert({
+      from_user: uid,
+      to_user: selectedFriend.friend_id,
+      friendship_id: selectedFriend.friendship_id,
+      amount: amt,
+      status: "pending",
+    });
+    if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
+    setSettleAmount(""); setShowSettle(false); await load();
+    setSubmitting(false);
   }
 
   if (loading) {
     return <div className="flex items-center justify-center h-full text-gray-400">جاري التحميل...</div>;
   }
 
+  // ─── صفحة تفاصيل الصديق ───
+  if (selectedFriend) {
+    return (
+      <div className="h-full overflow-y-auto bg-[var(--bg)]">
+        <div className="p-4">
+          <button onClick={() => setSelectedFriend(null)}
+            className="flex items-center gap-1 text-gray-400 text-sm mb-4">
+            <ArrowLeft size={16} /> رجوع
+          </button>
+          <div className="bg-white rounded-2xl p-4 border border-[var(--soft)] mb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-[var(--soft)] flex items-center justify-center">
+                <Wallet size={22} className="text-[var(--accent)]" />
+              </div>
+              <div>
+                <div className="text-base font-bold">{selectedFriend.friend_phone}</div>
+                <div className={"text-sm " + (selectedFriend.balance > 0 ? "text-green-500" : selectedFriend.balance < 0 ? "text-red-400" : "text-gray-400")}>
+                  {selectedFriend.balance > 0 ? "لك " + selectedFriend.balance + " جنيه" : selectedFriend.balance < 0 ? "عليك " + Math.abs(selectedFriend.balance) + " جنيه" : "الحساب مسوّى"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button onClick={() => setShowDebt(true)}
+              className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
+              <HandCoins size={22} className="text-[var(--accent)]" />
+              <span className="text-xs font-bold text-[var(--accent-dark)]">ليّ عنده</span>
+            </button>
+            <button onClick={() => setShowSettle(true)}
+              className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
+              <Banknote size={22} className="text-[var(--accent)]" />
+              <span className="text-xs font-bold text-[var(--accent-dark)]">دفعت له</span>
+            </button>
+          </div>
+
+          {pendingDebts.filter((d) => d.you_are === "creditor").length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">طلبات دين أرسلتها</h3>
+              {pendingDebts.filter((d) => d.you_are === "creditor").map((d) => (
+                <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm font-bold">لك {d.amount} جنيه</div>
+                    <span className="text-xs text-gray-400">بانتظار الموافقة</span>
+                  </div>
+                  {d.description && <div className="text-xs text-gray-400 mt-1">{d.description}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {pendingSetts.filter((s) => s.you_are === "sender").length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">تسويات أرسلتها</h3>
+              {pendingSetts.filter((s) => s.you_are === "sender").map((s) => (
+                <div key={s.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm font-bold">دفعت {s.amount} جنيه</div>
+                    <span className="text-xs text-gray-400">بانتظار التأكيد</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* مودال طلب دين */}
+        {showDebt && (
+          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setShowDebt(false)}>
+            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold mb-1">ليّ عنده</h3>
+              <p className="text-xs text-gray-400 mb-4">عندك فلوس عند {selectedFriend.friend_phone}</p>
+              <input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)}
+                placeholder="المبلغ بالجنيه" required
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
+              <input type="text" value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)}
+                placeholder="وصف (اختياري)"
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+              {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
+              <button onClick={sendDebtRequest} disabled={submitting}
+                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+                {submitting ? "جاري الإرسال..." : "إرسال طلب دين"}
+              </button>
+              <button onClick={() => setShowDebt(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
+
+        {/* مودال تسوية */}
+        {showSettle && (
+          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setShowSettle(false)}>
+            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold mb-1">دفعت له</h3>
+              <p className="text-xs text-gray-400 mb-4">دفعت مبلغ لـ {selectedFriend.friend_phone}</p>
+              <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
+                placeholder="المبلغ بالجنيه" required
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+              {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
+              <button onClick={sendSettlement} disabled={submitting}
+                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+                {submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}
+              </button>
+              <button onClick={() => setShowSettle(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── الصفحة الرئيسية للأصدقاء ───
   return (
     <div className="h-full overflow-y-auto bg-[var(--bg)]">
       <div className="p-4">
@@ -188,31 +386,48 @@ export default function FriendsView() {
           </div>
         )}
 
-        {pendingDebts.length > 0 && (
+        {pendingDebts.filter((d) => d.you_are === "debtor").length > 0 && (
           <div className="mb-4">
-            <h3 className="text-xs text-gray-400 mb-2">طلبات ديون</h3>
-            {pendingDebts.map((d) => (
+            <h3 className="text-xs text-gray-400 mb-2">طلبات ديون عليك</h3>
+            {pendingDebts.filter((d) => d.you_are === "debtor").map((d) => (
               <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
                 <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-bold">
-                    {d.you_are === "creditor" ? "لك" : "عليك"} {d.amount} جنيه
+                  <div className="text-sm font-bold">عليك {d.amount} جنيه</div>
+                  <div className="flex gap-1">
+                    <button onClick={() => respondDebt(d.id, true)}
+                      className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
+                      <Check size={14} /> موافق
+                    </button>
+                    <button onClick={() => respondDebt(d.id, false)}
+                      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
+                      <X size={14} /> رفض
+                    </button>
                   </div>
-                  {d.you_are === "debtor" ? (
-                    <div className="flex gap-1">
-                      <button onClick={() => respondDebt(d.id, true)}
-                        className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
-                        <Check size={14} /> موافق
-                      </button>
-                      <button onClick={() => respondDebt(d.id, false)}
-                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
-                        <X size={14} /> رفض
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-400">بانتظار الموافقة</span>
-                  )}
                 </div>
                 {d.description && <div className="text-xs text-gray-400">{d.description}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {pendingSetts.filter((s) => s.you_are === "receiver").length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-xs text-gray-400 mb-2">تأكيد استلام</h3>
+            {pendingSetts.filter((s) => s.you_are === "receiver").map((s) => (
+              <div key={s.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-bold">استلمت {s.amount} جنيه</div>
+                  <div className="flex gap-1">
+                    <button onClick={() => respondSettlement(s.id, true)}
+                      className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
+                      <Check size={14} /> أكدت
+                    </button>
+                    <button onClick={() => respondSettlement(s.id, false)}
+                      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
+                      <X size={14} /> ما استلمت
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -229,7 +444,8 @@ export default function FriendsView() {
           </div>
         ) : (
           friends.filter((f) => f.status === "accepted").map((f) => (
-            <div key={f.friendship_id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)] flex items-center justify-between">
+            <button key={f.friendship_id} onClick={() => setSelectedFriend(f)}
+              className="w-full bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[var(--soft)] flex items-center justify-center">
                   <Wallet size={18} className="text-[var(--accent)]" />
@@ -242,7 +458,7 @@ export default function FriendsView() {
                 </div>
               </div>
               <ArrowRight size={16} className="text-gray-300" />
-            </div>
+            </button>
           ))
         )}
       </div>
