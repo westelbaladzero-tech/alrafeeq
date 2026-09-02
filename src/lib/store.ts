@@ -3,6 +3,7 @@
 
 import type { Transaction } from './types';
 import { isSupabaseEnabled, getSupabase } from './supabase';
+import { isOnline, addToQueue } from './sync';
 
 const OLD_STORAGE_KEY = 'alrafeeq_transactions';
 const STORAGE_PREFIX = 'alrafeeq_transactions_';
@@ -91,8 +92,17 @@ function rowToTx(row: any): Transaction {
 
 export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>): Promise<Transaction> {
   const uid = await getUserId();
+  const full: Transaction = { ...tx, id: genId(), createdAt: new Date().toISOString() };
 
-  if (isSupabaseEnabled && uid) {
+  // احفظ محليًا فورًا
+  if (uid && typeof window !== 'undefined') {
+    const all = getLocal(uid);
+    all.unshift(full);
+    saveLocal(uid, all);
+  }
+
+  // ارفع للسحابة لو متصل
+  if (isSupabaseEnabled && uid && isOnline()) {
     const sb = getSupabase();
     if (sb) {
       const { data, error } = await sb.from('transactions').insert({
@@ -105,46 +115,48 @@ export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>):
         note: tx.note,
       }).select().single();
       if (!error && data) {
-        const newTx = rowToTx(data);
+        const cloudTx = rowToTx(data);
+        // حدّث المحلي بالـ id الصحيح من السحابة
         if (typeof window !== 'undefined') {
           const all = getLocal(uid);
-          all.unshift(newTx);
+          const idx = all.findIndex(t => t.id === full.id);
+          if (idx >= 0) all[idx] = cloudTx;
           saveLocal(uid, all);
         }
-        return newTx;
+        return cloudTx;
       }
     }
   }
 
-  const full: Transaction = { ...tx, id: genId(), createdAt: new Date().toISOString() };
-  if (uid && typeof window !== 'undefined') {
-    const all = getLocal(uid);
-    all.unshift(full);
-    saveLocal(uid, all);
+  // لو غير متصل → أضف للطابور
+  if (uid && !isOnline()) {
+    addToQueue(uid, 'add_tx', tx);
   }
+
   return full;
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
   const uid = await getUserId();
 
-  if (isSupabaseEnabled && uid) {
-    const sb = getSupabase();
-    if (sb) {
-      const { error } = await sb.from('transactions').delete().eq('id', id);
-      if (!error) {
-        if (typeof window !== 'undefined') {
-          const all = getLocal(uid).filter(t => t.id !== id);
-          saveLocal(uid, all);
-        }
-        return;
-      }
-    }
-  }
-
+  // احذف من المحلي فورًا
   if (uid && typeof window !== 'undefined') {
     const all = getLocal(uid).filter(t => t.id !== id);
     saveLocal(uid, all);
+  }
+
+  // احذف من السحابة لو متصل
+  if (isSupabaseEnabled && uid && isOnline()) {
+    const sb = getSupabase();
+    if (sb) {
+      const { error } = await sb.from('transactions').delete().eq('id', id);
+      if (!error) return;
+    }
+  }
+
+  // لو غير متصل → أضف للطابور
+  if (uid && !isOnline()) {
+    addToQueue(uid, 'delete_tx', { id });
   }
 }
 

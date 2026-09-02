@@ -1,17 +1,23 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MessageCircle, Users, Receipt, Shield, LogOut, RefreshCw } from "lucide-react";
 import ChatView from "@/components/ChatView";
 import PeopleView from "@/components/PeopleView";
 import HistoryView from "@/components/HistoryView";
 import AuthGate from "@/components/AuthGate";
 import InstallAndSupport from "@/components/InstallAndSupport";
+import ConnectionStatus from "@/components/ConnectionStatus";
 import { getSupabase } from "@/lib/supabase";
+import { initSync } from "@/lib/sync";
 
 type Tab = "chat" | "dashboard" | "history";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
+
+  useEffect(() => {
+    initSync();
+  }, []);
 
   async function handleLogout() {
     const sb = getSupabase();
@@ -46,6 +52,9 @@ export default function Home() {
 
         {/* بانر التثبيت + شريط أدوات */}
         <InstallAndSupport />
+
+        {/* مؤشر الاتصال */}
+        <ConnectionStatus />
 
         {/* المحتوى */}
         <section className="flex-1 overflow-hidden">

@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, UserRound, Loader2, Mic, MicOff, Camera, X, Paperclip } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
+import { isOnline, addToQueue } from "@/lib/sync";
 
 const OLD_STORAGE_KEY = "alrafeeq_chat_history";
 const STORAGE_PREFIX = "alrafeeq_chat_history_";
@@ -65,13 +66,22 @@ async function saveCloudMessage(msg: Msg) {
   const uid = userData.user?.id;
   if (!uid) return false;
 
-  const { error } = await (sb.from("chat_messages") as any).insert({
-    user_id: uid,
-    role: msg.role,
-    text: msg.text,
-  });
+  // لو متصل → ارفع للسحابة
+  if (isOnline()) {
+    const { error } = await (sb.from("chat_messages") as any).insert({
+      user_id: uid,
+      role: msg.role,
+      text: msg.text,
+    });
+    if (!error) return true;
+  }
 
-  return !error;
+  // لو غير متصل → أضف للطابور
+  if (!isOnline()) {
+    addToQueue(uid, "add_message", { role: msg.role, text: msg.text });
+  }
+
+  return !isOnline();
 }
 
 export default function ChatView() {
