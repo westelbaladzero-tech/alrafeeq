@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 export const viewport = {
   width: 'device-width',
@@ -17,7 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }
