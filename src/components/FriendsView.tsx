@@ -85,6 +85,7 @@ export default function FriendsView() {
   const [msgSending, setMsgSending] = useState(false);
   const [chatShowDebt, setChatShowDebt] = useState(false);
   const [chatShowSettle, setChatShowSettle] = useState(false);
+  const [settleDirection, setSettleDirection] = useState<"me" | "friend">("me");
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
 
@@ -260,9 +261,11 @@ export default function FriendsView() {
     setSubmitting(true);
     const sb = getSupabase() as any;
     if (!sb) { setSubmitting(false); return; }
+    const fromUser = settleDirection === "me" ? uid : chatFriend.friend_id;
+    const toUser = settleDirection === "me" ? chatFriend.friend_id : uid;
     const { error } = await sb.from("settlements").insert({
-      from_user: uid,
-      to_user: chatFriend.friend_id,
+      from_user: fromUser,
+      to_user: toUser,
       friendship_id: chatFriend.friendship_id,
       amount: amt,
       description: settleDesc || null,
@@ -270,8 +273,8 @@ export default function FriendsView() {
     });
     if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
     await sendSystemMessage(chatFriend.friendship_id,
-      "تسوية: " + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
-    setSettleAmount(""); setSettleDesc("");
+      (settleDirection === "me" ? "دفعت له: " : "سدد لي: ") + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
+    setSettleAmount(""); setSettleDesc(""); setSettleDirection("me");
     setChatShowSettle(false);
     await load();
     showToast("تم إرسال طلب التسوية");
@@ -321,7 +324,11 @@ export default function FriendsView() {
     const { data: theirSett } = await sb.from("settlements").select("amount")
       .eq("from_user", friend).eq("to_user", me).eq("status", "confirmed");
     const received = (theirSett || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
-    return (owed - paid) - (owe - received);
+    // owed = ما له عليّ (أنا الدائن)
+    // received = ما دفعه لي (from_user=friend) ← يُخصم من owed
+    // owe = ما عليّ له (أنا المدين)
+    // paid = ما دفعته أنا (from_user=me) ← يُخصم من owe
+    return (owed - received) - (owe - paid);
   }
 
   async function loadPendingDebts(userId: string) {
@@ -693,16 +700,18 @@ export default function FriendsView() {
     setSubmitting(true);
     const sb = getSupabase() as any;
     if (!sb) { setSubmitting(false); return; }
+    const fromUser = settleDirection === "me" ? uid : selectedFriend.friend_id;
+    const toUser = settleDirection === "me" ? selectedFriend.friend_id : uid;
     const { error } = await sb.from("settlements").insert({
-      from_user: uid,
-      to_user: selectedFriend.friend_id,
+      from_user: fromUser,
+      to_user: toUser,
       friendship_id: selectedFriend.friendship_id,
       amount: amt,
       description: settleDesc || null,
       status: "pending",
     });
     if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
-    setSettleAmount(""); setSettleDesc(""); setShowSettle(false); await load();
+    setSettleAmount(""); setSettleDesc(""); setSettleDirection("me"); setShowSettle(false); await load();
     showToast("تم إرسال طلب التسوية");
     setSubmitting(false);
   }
@@ -772,7 +781,7 @@ export default function FriendsView() {
           </button>
           <button onClick={() => setChatShowSettle(true)}
             className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0"
-            title="دفعت له">
+            title="تسوية">
             <Banknote size={18} className="text-[var(--accent)]" />
           </button>
           <input
@@ -839,8 +848,18 @@ export default function FriendsView() {
         {chatShowSettle && chatFriend && (
           <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowSettle(false)}>
             <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold mb-1">دفعت له</h3>
-              <p className="text-xs text-gray-400 mb-4">دفعت مبلغ لـ {chatFriend.friend_phone}</p>
+              <h3 className="text-lg font-bold mb-1">تسوية</h3>
+              <p className="text-xs text-gray-400 mb-4">{chatFriend.friend_phone}</p>
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => setSettleDirection("me")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  أنا دفعت له
+                </button>
+                <button onClick={() => setSettleDirection("friend")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  هو سدد لي
+                </button>
+              </div>
               <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
                 placeholder="المبلغ بالجنيه" required
                 className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
@@ -906,7 +925,7 @@ export default function FriendsView() {
             <button onClick={() => setShowSettle(true)}
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
               <Banknote size={22} className="text-[var(--accent)]" />
-              <span className="text-xs font-bold text-[var(--accent-dark)]">دفعت له</span>
+              <span className="text-xs font-bold text-[var(--accent-dark)]">تسوية</span>
             </button>
             <button onClick={() => openChat(selectedFriend)}
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
@@ -1094,8 +1113,18 @@ export default function FriendsView() {
         {showSettle && (
           <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setShowSettle(false)}>
             <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold mb-1">دفعت له</h3>
-              <p className="text-xs text-gray-400 mb-4">دفعت مبلغ لـ {selectedFriend.friend_phone}</p>
+              <h3 className="text-lg font-bold mb-1">تسوية</h3>
+              <p className="text-xs text-gray-400 mb-4">{selectedFriend.friend_phone}</p>
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => setSettleDirection("me")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  أنا دفعت له
+                </button>
+                <button onClick={() => setSettleDirection("friend")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  هو سدد لي
+                </button>
+              </div>
               <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
                 placeholder="المبلغ بالجنيه" required
                 className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />

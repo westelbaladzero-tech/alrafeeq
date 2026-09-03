@@ -329,7 +329,7 @@ export async function POST(req: NextRequest) {
             const paid = (mySett || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
             const { data: theirSett } = await admin.from("settlements").select("amount").eq("from_user", friendId).eq("to_user", userId).eq("status", "confirmed");
             const received = (theirSett || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
-            const bal = (owed - paid) - (owe - received);
+            const bal = (owed - received) - (owe - paid);
 
             if (bal > 0) totalOwed += bal;
             else if (bal < 0) totalOwe += Math.abs(bal);
