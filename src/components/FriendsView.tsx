@@ -116,11 +116,12 @@ export default function FriendsView() {
     const friendList: Friend[] = [];
     for (const ship of ships) {
       const friendId = ship.user_a === userId ? ship.user_b : ship.user_a;
-      const { data: profile } = await sb.from("profiles").select("phone").eq("id", friendId).maybeSingle();
+      const { data: profile } = await sb.rpc("get_friend_profile", { friend_id: friendId });
+      const p = profile && profile.length > 0 ? profile[0] : null;
       const balance = await calculateBalance(sb, userId, friendId);
       friendList.push({
         friendship_id: ship.id, friend_id: friendId,
-        friend_phone: profile?.phone || "غير معروف",
+        friend_phone: p?.phone || "غير معروف",
         status: ship.status, initiator: ship.initiator, balance,
         relationship: ship.relationship_type || "friend",
         gam3eya_total: ship.gam3eya_total || null,
@@ -264,21 +265,22 @@ export default function FriendsView() {
     const sb = getSupabase() as any;
     if (!sb) { setAdding(false); return; }
     try {
-      const { data: target } = await sb.from("profiles").select("id, phone").eq("phone", phoneInput).maybeSingle();
-      if (!target) { setErr("الرقم غير مسجل في التطبيق"); setAdding(false); return; }
-      if (target.id === uid) { setErr("ما تقدرش تضيف نفسك"); setAdding(false); return; }
+      const { data: target } = await sb.rpc("find_user_by_phone", { search_phone: phoneInput });
+      if (!target || target.length === 0) { setErr("الرقم غير مسجل في التطبيق"); setAdding(false); return; }
+      const friendData = target[0];
+      if (friendData.id === uid) { setErr("ما تقدرش تضيف نفسك"); setAdding(false); return; }
       const { data: existing } = await sb.from("friendships")
         .select("id, status, user_a, user_b")
         .or("user_a.eq." + uid + ",user_b.eq." + uid);
       const already = (existing || []).find((f: any) =>
-        (f.user_a === uid && f.user_b === target.id) ||
-        (f.user_b === uid && f.user_a === target.id));
+        (f.user_a === uid && f.user_b === friendData.id) ||
+        (f.user_b === uid && f.user_a === friendData.id));
       if (already) {
         setErr(already.status === "accepted" ? "صديقك بالفعل" : "طلب معلّق بالفعل");
         setAdding(false); return;
       }
       const { error } = await sb.from("friendships").insert({
-        user_a: uid, user_b: target.id, status: "pending", initiator: uid,
+        user_a: uid, user_b: friendData.id, status: "pending", initiator: uid,
       });
       if (error) { setErr("تعذّر إضافة الصديق"); setAdding(false); return; }
       setPhoneInput(""); setShowAdd(false); await load();
