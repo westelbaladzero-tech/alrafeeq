@@ -89,7 +89,8 @@ export default function FriendsView() {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 15000);
+    // التحديث الدوري: خفيف فقط (طلبات جديدة) — لا يعيد بناء القائمة
+    const interval = setInterval(pollPending, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -103,6 +104,14 @@ export default function FriendsView() {
     await loadPendingSettlements(userId);
     setLoading(false);
     setIsInitialLoad(false);
+  }
+
+  // تحديث خفيف: يبحث عن طلبات معلّقة جديدة فقط — لا يلمس قائمة الأصدقاء
+  async function pollPending() {
+    const userId = await getResolvedUserId();
+    if (!userId) return;
+    await loadPendingDebts(userId);
+    await loadPendingSettlements(userId);
   }
 
   async function loadFriends(userId: string) {
@@ -283,7 +292,17 @@ export default function FriendsView() {
         user_a: uid, user_b: friendData.id, status: "pending", initiator: uid,
       });
       if (error) { setErr("تعذّر إضافة الصديق"); setAdding(false); return; }
-      setPhoneInput(""); setShowAdd(false); await load();
+      setPhoneInput(""); setShowAdd(false);
+      // اسأل المُرسِل عن طبيعة العلاقة
+      const { data: newShip } = await sb.from("friendships")
+        .select("id").eq("user_a", uid).eq("user_b", friendData.id).maybeSingle();
+      if (newShip) {
+        setRelationForShip(newShip.id);
+        setRelationType("");
+        setGam3eyaRole("member");
+        setShowRelation(true);
+      }
+      await load();
       showToast("تم إرسال طلب الصداقة");
     } catch { setErr("خطأ في الاتصال"); }
     setAdding(false);
