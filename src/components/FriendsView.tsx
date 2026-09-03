@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
 
@@ -79,6 +79,12 @@ export default function FriendsView() {
   const [gam3eyaAmount, setGam3eyaAmount] = useState("");
   const [gam3eyaStart, setGam3eyaStart] = useState("");
   const [gam3eyaRole, setGam3eyaRole] = useState("member");
+  const [chatFriend, setChatFriend] = useState<Friend | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [msgInput, setMsgInput] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
+  const msgEndRef = useRef<HTMLDivElement>(null);
+  const chatChannelRef = useRef<any>(null);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -89,9 +95,13 @@ export default function FriendsView() {
 
   useEffect(() => {
     load();
-    // التحديث الدوري: خفيف فقط (طلبات جديدة) — لا يعيد بناء القائمة
     const interval = setInterval(pollPending, 15000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (chatChannelRef.current) {
+        chatChannelRef.current.unsubscribe();
+      }
+    };
   }, []);
 
   async function load() {
@@ -112,6 +122,81 @@ export default function FriendsView() {
     if (!userId) return;
     await loadPendingDebts(userId);
     await loadPendingSettlements(userId);
+  }
+
+  // ─── الشات ───
+  async function openChat(friend: Friend) {
+    setChatFriend(friend);
+    setMessages([]);
+    await loadMessages(friend.friendship_id);
+    subscribeToMessages(friend.friendship_id);
+  }
+
+  function closeChat() {
+    if (chatChannelRef.current) {
+      chatChannelRef.current.unsubscribe();
+      chatChannelRef.current = null;
+    }
+    setChatFriend(null);
+    setMessages([]);
+    setMsgInput("");
+  }
+
+  async function loadMessages(friendshipId: string) {
+    const sb = getSupabase() as any;
+    if (!sb) return;
+    const { data } = await sb.from("messages")
+      .select("id, sender_id, content, type, created_at, read_at")
+      .eq("friendship_id", friendshipId)
+      .order("created_at", { ascending: true })
+      .limit(100);
+    setMessages(data || []);
+    // علّم رسائلك كمقروءة
+    if (data && data.length > 0 && uid) {
+      const unread = data.filter((m: any) => m.sender_id !== uid && !m.read_at);
+      for (const m of unread) {
+        await sb.from("messages").update({ read_at: new Date().toISOString() }).eq("id", m.id);
+      }
+    }
+    setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  }
+
+  function subscribeToMessages(friendshipId: string) {
+    const sb = getSupabase() as any;
+    if (!sb) return;
+    if (chatChannelRef.current) chatChannelRef.current.unsubscribe();
+    const channel = sb.channel("chat:" + friendshipId)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: "friendship_id=eq." + friendshipId },
+        (payload: any) => {
+          setMessages((prev) => {
+            if (prev.find((m) => m.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
+          // علّم كمقروء لو الرسالة لي
+          if (payload.new.sender_id !== uid && !payload.new.read_at) {
+            sb.from("messages").update({ read_at: new Date().toISOString() }).eq("id", payload.new.id);
+          }
+          setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+        }
+      )
+      .subscribe();
+    chatChannelRef.current = channel;
+  }
+
+  async function sendMessage() {
+    if (!msgInput.trim() || !chatFriend || !uid) return;
+    setMsgSending(true);
+    const sb = getSupabase() as any;
+    if (!sb) { setMsgSending(false); return; }
+    const { error } = await sb.from("messages").insert({
+      friendship_id: chatFriend.friendship_id,
+      sender_id: uid,
+      content: msgInput.trim(),
+      type: "text",
+    });
+    if (!error) setMsgInput("");
+    setMsgSending(false);
   }
 
   async function loadFriends(userId: string) {
@@ -547,6 +632,72 @@ export default function FriendsView() {
     return <div className="flex items-center justify-center h-full text-gray-400">جاري التحميل...</div>;
   }
 
+  // ─── صفحة الشات ───
+  if (chatFriend) {
+    return (
+      <div className="h-full flex flex-col bg-[var(--bg)]">
+        <div className="p-3 bg-white border-b border-[var(--soft)] flex items-center gap-2">
+          <button onClick={closeChat} className="text-gray-400">
+            <ArrowRight size={20} />
+          </button>
+          <div className="w-9 h-9 rounded-full bg-[var(--soft)] flex items-center justify-center">
+            <MessageCircle size={18} className="text-[var(--accent)]" />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-bold">{chatFriend.friend_phone}</div>
+            <div className="text-[10px] text-gray-400">{getRelationLabel(chatFriend.relationship)}</div>
+          </div>
+          <div className={"text-xs " + (chatFriend.balance > 0 ? "text-green-500" : chatFriend.balance < 0 ? "text-red-400" : "text-gray-300")}>
+            {chatFriend.balance !== 0 ? (chatFriend.balance > 0 ? "لك " : "عليك ") + Math.abs(chatFriend.balance) : ""}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {messages.length === 0 && (
+            <div className="text-center text-gray-300 text-sm mt-8">لا توجد رسائل بعد</div>
+          )}
+          {messages.map((m) => {
+            const mine = m.sender_id === uid;
+            if (m.type === "system") {
+              return (
+                <div key={m.id} className="text-center">
+                  <span className="text-[10px] text-gray-400 bg-gray-100 rounded-full px-3 py-1">{m.content}</span>
+                </div>
+              );
+            }
+            return (
+              <div key={m.id} className={"flex " + (mine ? "justify-end" : "justify-start")}>
+                <div className={"max-w-[75%] rounded-2xl px-3 py-2 " + (mine ? "bg-[var(--accent)] text-white" : "bg-white text-gray-800 border border-[var(--soft)]")}>
+                  <div className="text-sm whitespace-pre-wrap break-words">{m.content}</div>
+                  <div className={"text-[9px] mt-0.5 " + (mine ? "text-white/60" : "text-gray-300")}>
+                    {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+                    {mine && (m.read_at ? " ✓✓" : " ✓")}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={msgEndRef} />
+        </div>
+
+        <div className="p-3 bg-white border-t border-[var(--soft)] flex items-center gap-2">
+          <input
+            type="text"
+            value={msgInput}
+            onChange={(e) => setMsgInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            placeholder="اكتب رسالة..."
+            className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm"
+          />
+          <button onClick={sendMessage} disabled={msgSending || !msgInput.trim()}
+            className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center disabled:opacity-40 shrink-0">
+            <Send size={18} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ─── صفحة تفاصيل الصديق ───
   if (selectedFriend) {
     return (
@@ -584,7 +735,7 @@ export default function FriendsView() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="grid grid-cols-3 gap-2 mb-4">
             <button onClick={() => setShowDebt(true)}
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
               <HandCoins size={22} className="text-[var(--accent)]" />
@@ -594,6 +745,11 @@ export default function FriendsView() {
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
               <Banknote size={22} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent-dark)]">دفعت له</span>
+            </button>
+            <button onClick={() => openChat(selectedFriend)}
+              className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
+              <MessageCircle size={22} className="text-[var(--accent)]" />
+              <span className="text-xs font-bold text-[var(--accent-dark)]">دردشة</span>
             </button>
           </div>
 
@@ -898,25 +1054,27 @@ export default function FriendsView() {
           </div>
         ) : (
           friends.filter((f) => f.status === "accepted").map((f) => (
-            <button key={f.friendship_id} onClick={() => {
-              setSelectedFriend(f);
-              getResolvedUserId().then((myId) => { if (myId) loadFriendDetails(myId, f.friend_id); });
-            }}
-              className="w-full bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)] flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div key={f.friendship_id} className="w-full bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)] flex items-center justify-between">
+              <button onClick={() => {
+                setSelectedFriend(f);
+                getResolvedUserId().then((myId) => { if (myId) loadFriendDetails(myId, f.friend_id); });
+              }} className="flex items-center gap-3 flex-1">
                 <div className="w-10 h-10 rounded-full bg-[var(--soft)] flex items-center justify-center">
                   <Wallet size={18} className="text-[var(--accent)]" />
                 </div>
-                <div>
+                <div className="text-right">
                   <div className="text-sm font-bold">{f.friend_phone}</div>
                   <div className="text-[10px] text-gray-300">{getRelationLabel(f.relationship)}</div>
                   <div className={"text-xs " + (f.balance > 0 ? "text-green-500" : f.balance < 0 ? "text-red-400" : "text-gray-400")}>
                     {f.balance > 0 ? "لك " + f.balance + " جنيه" : f.balance < 0 ? "عليك " + Math.abs(f.balance) + " جنيه" : "مسوّى"}
                   </div>
                 </div>
-              </div>
-              <ArrowRight size={16} className="text-gray-300" />
-            </button>
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); openChat(f); }}
+                className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0">
+                <MessageCircle size={18} className="text-[var(--accent)]" />
+              </button>
+            </div>
           ))
         )}
       </div>
