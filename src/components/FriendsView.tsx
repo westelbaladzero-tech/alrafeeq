@@ -12,6 +12,11 @@ interface Friend {
   initiator: string;
   balance: number;
   relationship: string;
+  gam3eya_total: number | null;
+  gam3eya_completed: number | null;
+  gam3eya_my_turn: number | null;
+  gam3eya_amount: number | null;
+  gam3eya_start_date: string | null;
 }
 
 interface PendingDebt {
@@ -68,6 +73,10 @@ export default function FriendsView() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [toast, setToast] = useState("");
   const [showChangeRelation, setShowChangeRelation] = useState(false);
+  const [gam3eyaTotal, setGam3eyaTotal] = useState("");
+  const [gam3eyaMyTurn, setGam3eyaMyTurn] = useState("");
+  const [gam3eyaAmount, setGam3eyaAmount] = useState("");
+  const [gam3eyaStart, setGam3eyaStart] = useState("");
 
   function showToast(msg: string) {
     setToast(msg);
@@ -99,7 +108,7 @@ export default function FriendsView() {
     if (!sb) return;
     const { data: ships } = await sb
       .from("friendships")
-      .select("id, user_a, user_b, status, initiator, relationship_type")
+      .select("id, user_a, user_b, status, initiator, relationship_type, gam3eya_total, gam3eya_completed, gam3eya_my_turn, gam3eya_amount, gam3eya_start_date")
       .or("user_a.eq." + userId + ",user_b.eq." + userId);
     if (!ships || ships.length === 0) { setFriends([]); return; }
     const friendList: Friend[] = [];
@@ -112,6 +121,11 @@ export default function FriendsView() {
         friend_phone: profile?.phone || "غير معروف",
         status: ship.status, initiator: ship.initiator, balance,
         relationship: ship.relationship_type || "friend",
+        gam3eya_total: ship.gam3eya_total || null,
+        gam3eya_completed: ship.gam3eya_completed || 0,
+        gam3eya_my_turn: ship.gam3eya_my_turn || null,
+        gam3eya_amount: ship.gam3eya_amount ? Number(ship.gam3eya_amount) : null,
+        gam3eya_start_date: ship.gam3eya_start_date || null,
       });
     }
     setFriends(friendList);
@@ -289,12 +303,25 @@ export default function FriendsView() {
     if (!relationType || !relationForShip) return;
     const sb = getSupabase() as any;
     if (!sb) return;
-    await sb.from("friendships")
-      .update({ relationship_type: relationType })
-      .eq("id", relationForShip);
+    const updateData: any = { relationship_type: relationType };
+    if (relationType === "association") {
+      const total = Number(gam3eyaTotal);
+      const myTurn = Number(gam3eyaMyTurn);
+      const amount = Number(gam3eyaAmount);
+      if (!total || total < 2) { showToast("عدد الأدوار لازم 2 على الأقل"); return; }
+      if (!myTurn || myTurn < 1 || myTurn > total) { showToast("دورك يجب أن يكون بين 1 و " + total); return; }
+      if (!amount || amount <= 0) { showToast("المبلغ الشهري غير صحيح"); return; }
+      updateData.gam3eya_total = total;
+      updateData.gam3eya_my_turn = myTurn;
+      updateData.gam3eya_amount = amount;
+      updateData.gam3eya_completed = 0;
+      if (gam3eyaStart) updateData.gam3eya_start_date = gam3eyaStart;
+    }
+    await sb.from("friendships").update(updateData).eq("id", relationForShip);
     setShowRelation(false);
     setRelationForShip(null);
     setRelationType("");
+    setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart("");
     await load();
   }
 
@@ -305,6 +332,7 @@ export default function FriendsView() {
       colleague: "أعمل مع",
       partner: "شريك",
       client: "عميل",
+      association: "جمعية",
     };
     return labels[type] || "صديق";
   }
@@ -593,6 +621,35 @@ export default function FriendsView() {
             </div>
           )}
 
+          {/* تقدم الجمعية */}
+          {selectedFriend.relationship === "association" && selectedFriend.gam3eya_total && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">جمعية</h3>
+              <div className="bg-white rounded-2xl p-3 border border-[var(--soft)]">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="text-sm font-bold">دورك: {selectedFriend.gam3eya_my_turn}</div>
+                  <div className="text-xs text-gray-400">
+                    {selectedFriend.gam3eya_completed >= selectedFriend.gam3eya_my_turn ? "استلمت دورك ✅" : "بانتظار دورك"}
+                  </div>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
+                  <div className="bg-[var(--accent)] rounded-full h-2 transition-all"
+                    style={{ width: Math.round(((selectedFriend.gam3eya_completed || 0) / selectedFriend.gam3eya_total) * 100) + "%" }} />
+                </div>
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span>المنقضي: {selectedFriend.gam3eya_completed || 0}/{selectedFriend.gam3eya_total}</span>
+                  <span>المتبقي: {selectedFriend.gam3eya_total - (selectedFriend.gam3eya_completed || 0)}</span>
+                </div>
+                {selectedFriend.gam3eya_amount && (
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    شهرياً: {selectedFriend.gam3eya_amount} جنيه
+                    {selectedFriend.gam3eya_start_date && " • بدأت: " + new Date(selectedFriend.gam3eya_start_date).toLocaleDateString("ar-EG")}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* سجل المعاملات */}
           {transactions.length > 0 && (
             <div className="mb-4">
@@ -840,7 +897,7 @@ export default function FriendsView() {
 
       {showRelation && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowRelation(false)}>
-          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold text-center mb-1">ما طبيعة علاقتك؟</h3>
             <p className="text-xs text-gray-400 text-center mb-4">ده يساعدنا نفهم حساباتك أحسن</p>
             <div className="space-y-2">
@@ -850,6 +907,7 @@ export default function FriendsView() {
                 { value: "colleague", label: "أعمل مع", emoji: "👥" },
                 { value: "partner", label: "شريك", emoji: "🤝" },
                 { value: "client", label: "عميل", emoji: "📋" },
+                { value: "association", label: "جمعية", emoji: "🔄" },
               ].map((opt) => (
                 <button key={opt.value} onClick={() => setRelationType(opt.value)}
                   className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
@@ -859,6 +917,29 @@ export default function FriendsView() {
                 </button>
               ))}
             </div>
+
+            {relationType === "association" && (
+              <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+                <input type="number" value={gam3eyaTotal} onChange={(e) => setGam3eyaTotal(e.target.value)}
+                  placeholder="عدد الأدوار الكلية" min={2}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
+                  placeholder="دورك (رقم الدورة)" min={1}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                <input type="number" value={gam3eyaAmount} onChange={(e) => setGam3eyaAmount(e.target.value)}
+                  placeholder="المبلغ الشهري" min={1}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                <input type="date" value={gam3eyaStart} onChange={(e) => setGam3eyaStart(e.target.value)}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                {gam3eyaTotal && gam3eyaAmount && Number(gam3eyaTotal) > 0 && Number(gam3eyaAmount) > 0 && (
+                  <div className="bg-green-50 rounded-lg p-2 text-xs text-green-600 text-center">
+                    إجمالي الجمعية: {Number(gam3eyaTotal) * Number(gam3eyaAmount)} جنيه
+                    {gam3eyaMyTurn && Number(gam3eyaMyTurn) > 0 && " • دورك: " + gam3eyaMyTurn}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button onClick={setRelationship} disabled={!relationType}
               className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm mt-4">
               تأكيد
@@ -894,7 +975,7 @@ export default function FriendsView() {
       {/* مودال تغيير العلاقة */}
       {showChangeRelation && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowChangeRelation(false)}>
-          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold text-center mb-1">غيّر نوع العلاقة</h3>
             <p className="text-xs text-gray-400 text-center mb-4">النوع الحالي: {getRelationLabel(relationType)}</p>
             <div className="space-y-2">
@@ -904,6 +985,7 @@ export default function FriendsView() {
                 { value: "colleague", label: "أعمل مع", emoji: "👥" },
                 { value: "partner", label: "شريك", emoji: "🤝" },
                 { value: "client", label: "عميل", emoji: "📋" },
+                { value: "association", label: "جمعية", emoji: "🔄" },
               ].map((opt) => (
                 <button key={opt.value} onClick={() => setRelationType(opt.value)}
                   className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
@@ -913,14 +995,39 @@ export default function FriendsView() {
                 </button>
               ))}
             </div>
+
+            {relationType === "association" && (
+              <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+                <input type="number" value={gam3eyaTotal} onChange={(e) => setGam3eyaTotal(e.target.value)}
+                  placeholder="عدد الأدوار الكلية" min={2}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
+                  placeholder="دورك (رقم الدورة)" min={1}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                <input type="number" value={gam3eyaAmount} onChange={(e) => setGam3eyaAmount(e.target.value)}
+                  placeholder="المبلغ الشهري" min={1}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                <input type="date" value={gam3eyaStart} onChange={(e) => setGam3eyaStart(e.target.value)}
+                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+              </div>
+            )}
+
             <button onClick={async () => {
               if (relationType && relationForShip) {
                 const sb = getSupabase() as any;
                 if (sb) {
-                  await sb.from("friendships").update({ relationship_type: relationType }).eq("id", relationForShip);
+                  const updateData: any = { relationship_type: relationType };
+                  if (relationType === "association") {
+                    if (gam3eyaTotal) updateData.gam3eya_total = Number(gam3eyaTotal);
+                    if (gam3eyaMyTurn) updateData.gam3eya_my_turn = Number(gam3eyaMyTurn);
+                    if (gam3eyaAmount) updateData.gam3eya_amount = Number(gam3eyaAmount);
+                    if (gam3eyaStart) updateData.gam3eya_start_date = gam3eyaStart;
+                  }
+                  await sb.from("friendships").update(updateData).eq("id", relationForShip);
                   showToast("تم تحديث العلاقة");
                   setShowChangeRelation(false);
                   setRelationForShip(null);
+                  setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart("");
                   if (selectedFriend) {
                     setSelectedFriend({ ...selectedFriend, relationship: relationType });
                   }
