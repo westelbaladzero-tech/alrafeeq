@@ -453,10 +453,11 @@ export default function FriendsView() {
       }
 
       setShowPin(false);
+      const action = pendingAction;
       setPinInput("");
       setPendingAction(null);
       await load();
-      showToast(pendingAction.accept ? (pendingAction.type === "debt" ? "تم تأكيد الدين" : "تم تأكيد التسوية") : "تم الرفض");
+      showToast(action?.accept ? (action.type === "debt" ? "تم تأكيد الدين" : "تم تأكيد التسوية") : "تم الرفض");
     } catch {
       setPinErr("خطأ في الاتصال");
     }
@@ -650,7 +651,7 @@ export default function FriendsView() {
                   <div className="text-xs text-gray-400">
                     {selectedFriend.gam3eya_role === "manager"
                       ? "Pot: " + (selectedFriend.gam3eya_total * (selectedFriend.gam3eya_amount || 0)) + " جنيه"
-                      : (selectedFriend.gam3eya_completed >= selectedFriend.gam3eya_my_turn ? "استلمت دورك ✅" : "بانتظار دورك")}
+                      : ((selectedFriend.gam3eya_completed || 0) >= (selectedFriend.gam3eya_my_turn || 0) ? "استلمت دورك ✅" : "بانتظار دورك")}
                   </div>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
@@ -1076,7 +1077,9 @@ export default function FriendsView() {
                   setRelationForShip(null);
                   setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart(""); setGam3eyaRole("member");
                   if (selectedFriend) {
-                    setSelectedFriend({ ...selectedFriend, relationship: relationType });
+                    const sf: Friend = selectedFriend;
+                    const updated: Friend = { ...sf, relationship: relationType, gam3eya_role: relationType === "association" ? gam3eyaRole : sf.gam3eya_role };
+                    setSelectedFriend(updated);
                   }
                   await load();
                 }
