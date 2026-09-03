@@ -203,14 +203,14 @@ export default function FriendsView() {
     // الديون المؤكدة (للأقساط)
     const { data: debts } = await sb.from("debt_requests")
       .select("id, amount, description, is_installment, total_installments, installment_amount, paid_installments, start_date, created_at, creditor, debtor, status")
-      .or("creditor.eq." + me + ",debtor.eq." + friendId)
+      .or(`and(creditor.eq.${me},debtor.eq.${friendId}),and(creditor.eq.${friendId},debtor.eq.${me})`)
       .eq("status", "confirmed")
       .order("created_at", { ascending: false });
 
     // التسويات المؤكدة
     const { data: setts } = await sb.from("settlements")
       .select("id, amount, description, from_user, to_user, created_at, status")
-      .or("from_user.eq." + me + ",to_user.eq." + me)
+      .or(`and(from_user.eq.${me},to_user.eq.${friendId}),and(from_user.eq.${friendId},to_user.eq.${me})`)
       .eq("status", "confirmed")
       .order("created_at", { ascending: false });
 
@@ -294,9 +294,9 @@ export default function FriendsView() {
       .update({ status: accept ? "accepted" : "blocked", updated_at: new Date().toISOString() })
       .eq("id", shipId);
     if (accept) {
-      // اسأل عن نوع العلاقة
       setRelationForShip(shipId);
       setRelationType("");
+      setGam3eyaRole("member");
       setShowRelation(true);
     }
     await load();
@@ -329,7 +329,7 @@ export default function FriendsView() {
     setShowRelation(false);
     setRelationForShip(null);
     setRelationType("");
-    setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart("");
+    setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart(""); setGam3eyaRole("member");
     await load();
   }
 
@@ -541,7 +541,16 @@ export default function FriendsView() {
               </div>
               <div className="flex-1">
                 <div className="text-base font-bold">{selectedFriend.friend_phone}</div>
-                <button onClick={() => { setRelationForShip(selectedFriend.friendship_id); setRelationType(selectedFriend.relationship); setShowChangeRelation(true); }}
+                <button onClick={() => {
+                  setRelationForShip(selectedFriend.friendship_id);
+                  setRelationType(selectedFriend.relationship);
+                  setGam3eyaRole(selectedFriend.gam3eya_role || "member");
+                  setGam3eyaTotal(selectedFriend.gam3eya_total ? String(selectedFriend.gam3eya_total) : "");
+                  setGam3eyaMyTurn(selectedFriend.gam3eya_my_turn ? String(selectedFriend.gam3eya_my_turn) : "");
+                  setGam3eyaAmount(selectedFriend.gam3eya_amount ? String(selectedFriend.gam3eya_amount) : "");
+                  setGam3eyaStart(selectedFriend.gam3eya_start_date ? selectedFriend.gam3eya_start_date.split("T")[0] : "");
+                  setShowChangeRelation(true);
+                }}
                   className="text-xs text-gray-400 hover:text-[var(--accent)] flex items-center gap-1 mb-0.5">
                   {getRelationLabel(selectedFriend.relationship)}
                   <span className="text-[9px]">✎</span>
@@ -1065,7 +1074,7 @@ export default function FriendsView() {
                   showToast("تم تحديث العلاقة");
                   setShowChangeRelation(false);
                   setRelationForShip(null);
-                  setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart("");
+                  setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart(""); setGam3eyaRole("member");
                   if (selectedFriend) {
                     setSelectedFriend({ ...selectedFriend, relationship: relationType });
                   }
