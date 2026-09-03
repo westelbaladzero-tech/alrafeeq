@@ -12,7 +12,8 @@ const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/interaction
 
 const ANALYSIS_KEYWORDS = ["تقرير", "أكتر", "أنهى", "تحليل", "نصيحة", "إيه اللي", "صرفت كام",
   "أكثر", "ملخص", "إحصائيات", "نمط", "أنماط", "ليه", "نصائح", "ميزانية", "كم صرفت", "فين فلوس",
-  "رصيده", "ليا كام", "عليا كام", "وضع", "حال"];
+  "رصيده", "ليا كام", "عليا كام", "وضع", "حال",
+  "ليك", "عليك", "صاحب", "صديق", "جمعية", "أقساط", "دين", "تسوية", "رصيد الأصدقاء", "حسابات الأصدقاء"];
 
 function needsGeminiAnalysis(message: string): boolean {
   const lower = message.toLowerCase().trim();
@@ -186,6 +187,15 @@ const SYSTEM_PROMPT = `أنت "الرفيق" — صديق حقيقي لي {userN
 - لو سأل عن شخص بالاسم، جاوبه من بيانات الحسابات المقدمة في السياق
 - لا تسجل معاملة شخص تحت فئة "أخرى" — استخدم "عمولة"
 
+حسابات الأصدقاء (مهم جداً):
+- لو سأل "كم ليك عند الناس؟" أو "حسابات الأصدقاء؟" — اعرض الأرصدة من قسم "═══ حسابات الأصدقاء ═══" في السياق
+- لو سأل عن صديق محدد — ابحث في بيانات الأصدقاء في السياق
+- لو سأل عن "الجمعية" — اعرض حالة الجمعية من السياق
+- لو سأل عن "الأقساط" — اعرض حالة الأقساط
+- لو سأل عن "طلبات معلّقة" — اعرضها من السياق
+- "صافي رصيدك مع الأصدقاء" = الإجمالي ليك ناقص الإجمالي عليك من قسم حسابات الأصدقاء
+- لو لم يوجد قسم "═══ حسابات الأصدقاء ═══" في السياق → ليس لديه أصدقاء بعد
+
 أرجع JSON بهذا الشكل بالظبط:
 {"transaction": {"type": "expense|income", "amount": 0, "category": "", "main": "personal|work", "method": "cash|card|wallet|bank|unknown", "person": "اسم الشخص أو null", "note": ""} أو null، "profile_update": {"name": ""} أو {"work_type": ""} أو null، "category_update": {"action": "add|delete", "category": ""} أو null، "reply": "ردك هنا"}`;
 
@@ -292,6 +302,87 @@ export async function POST(req: NextRequest) {
           context = "الرصيد: " + balance + " جنيه (الرصيد = الدخل ناقص المصروفات، لو سالب يعني صرف أكتر من دخله)\n" +
             "إجمالي الدخل: " + income + "\nإجمالي المصروفات: " + expense + "\n" +
             "أعلى الفئات: " + (topCats || "لا يوجد") + "\nآخر المعاملات:\n" + recent + personData;
+        }
+
+        // ─── بيانات الأصدقاء والديون ───
+        const { data: ships } = await admin.from("friendships")
+          .select("id, user_a, user_b, status, relationship_type, gam3eya_total, gam3eya_completed, gam3eya_my_turn, gam3eya_amount, gam3eya_role")
+          .or("user_a.eq." + userId + ",user_b.eq." + userId)
+          .eq("status", "accepted");
+
+        if (ships && ships.length > 0) {
+          let friendsContext = "\n\n═══ حسابات الأصدقاء ═══\n";
+          let totalOwed = 0, totalOwe = 0;
+
+          for (const ship of ships) {
+            const friendId = ship.user_a === userId ? ship.user_b : ship.user_a;
+            const { data: friendProfile } = await admin.rpc("get_friend_profile", { friend_id: friendId });
+            const friendName = (friendProfile && friendProfile.length > 0) ? friendProfile[0].phone : "غير معروف";
+            const relLabel = ({ friend: "صديق", employer: "صاحب عمل", colleague: "أعمل مع", partner: "شريك", client: "عميل", association: "جمعية" } as Record<string, string>)[ship.relationship_type || "friend"] || "صديق";
+
+            // حساب الرصيد
+            const { data: myDebts } = await admin.from("debt_requests").select("amount").eq("creditor", userId).eq("debtor", friendId).eq("status", "confirmed");
+            const owed = (myDebts || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
+            const { data: theirDebts } = await admin.from("debt_requests").select("amount").eq("creditor", friendId).eq("debtor", userId).eq("status", "confirmed");
+            const owe = (theirDebts || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
+            const { data: mySett } = await admin.from("settlements").select("amount").eq("from_user", userId).eq("to_user", friendId).eq("status", "confirmed");
+            const paid = (mySett || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
+            const { data: theirSett } = await admin.from("settlements").select("amount").eq("from_user", friendId).eq("to_user", userId).eq("status", "confirmed");
+            const received = (theirSett || []).reduce((s: number, d: any) => s + Number(d.amount), 0);
+            const bal = (owed - paid) - (owe - received);
+
+            if (bal > 0) totalOwed += bal;
+            else if (bal < 0) totalOwe += Math.abs(bal);
+
+            friendsContext += friendName + " (" + relLabel + "): ";
+            if (bal > 0) friendsContext += "ليك " + bal + " جنيه";
+            else if (bal < 0) friendsContext += "عليك " + Math.abs(bal) + " جنيه";
+            else friendsContext += "الحساب مسوّى";
+
+            // حالة الجمعية
+            if (ship.relationship_type === "association" && ship.gam3eya_total) {
+              friendsContext += " — جمعية: " + (ship.gam3eya_completed || 0) + "/" + ship.gam3eya_total + " منقضي";
+              if (ship.gam3eya_role === "manager") friendsContext += " (أنت المدير)";
+              else if (ship.gam3eya_my_turn) friendsContext += " (دورك: " + ship.gam3eya_my_turn + ")";
+            }
+
+            // الأقساط
+            const { data: installments } = await admin.from("debt_requests")
+              .select("amount, total_installments, paid_installments, installment_amount")
+              .eq("creditor", userId).eq("debtor", friendId).eq("is_installment", true).eq("status", "confirmed");
+            for (const inst of installments || []) {
+              friendsContext += "\n  ↳ أقساط: " + inst.amount + " جنيه، " + (inst.paid_installments || 0) + "/" + inst.total_installments + " مسدّد";
+            }
+            friendsContext += "\n";
+          }
+
+          // الطلبات المعلّقة
+          const { data: pendingDebts } = await admin.from("debt_requests")
+            .select("amount, creditor, debtor, description").eq("status", "pending")
+            .or("creditor.eq." + userId + ",debtor.eq." + userId);
+          if (pendingDebts && pendingDebts.length > 0) {
+            friendsContext += "\nطلبات معلّقة: " + pendingDebts.length + "\n";
+            for (const d of pendingDebts) {
+              const isCreditor = d.creditor === userId;
+              friendsContext += "  ↳ " + (isCreditor ? "ليك " : "عليك ") + d.amount + " جنيه" + (d.description ? " — " + d.description : "") + "\n";
+            }
+          }
+
+          const { data: pendingSetts } = await admin.from("settlements")
+            .select("amount, from_user, to_user").eq("status", "pending")
+            .or("from_user.eq." + userId + ",to_user.eq." + userId);
+          if (pendingSetts && pendingSetts.length > 0) {
+            friendsContext += "\nتسويات معلّقة: " + pendingSetts.length + "\n";
+            for (const s of pendingSetts) {
+              const isSender = s.from_user === userId;
+              friendsContext += "  ↳ " + (isSender ? "دفعت " : "استلمت ") + s.amount + " جنيه\n";
+            }
+          }
+
+          friendsContext += "\nالإجمالي: ليك " + totalOwed + " جنيه، عليك " + totalOwe + " جنيه";
+          friendsContext += " → صافي: " + (totalOwed - totalOwe >= 0 ? "+" : "") + (totalOwed - totalOwe) + " جنيه";
+
+          context += friendsContext;
         }
       }
     } catch {}
