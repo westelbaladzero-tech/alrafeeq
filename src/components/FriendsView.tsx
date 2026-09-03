@@ -83,6 +83,8 @@ export default function FriendsView() {
   const [messages, setMessages] = useState<any[]>([]);
   const [msgInput, setMsgInput] = useState("");
   const [msgSending, setMsgSending] = useState(false);
+  const [chatShowDebt, setChatShowDebt] = useState(false);
+  const [chatShowSettle, setChatShowSettle] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
 
@@ -197,6 +199,83 @@ export default function FriendsView() {
     });
     if (!error) setMsgInput("");
     setMsgSending(false);
+  }
+
+  // إرسال رسالة نظام في الشات (للديون والتسويات)
+  async function sendSystemMessage(friendshipId: string, content: string) {
+    const sb = getSupabase() as any;
+    if (!sb) return;
+    await sb.from("messages").insert({
+      friendship_id: friendshipId,
+      sender_id: uid,
+      content,
+      type: "system",
+    });
+  }
+
+  // إرسال طلب دين من داخل الشات
+  async function sendChatDebtRequest() {
+    setActionErr("");
+    if (!debtAmount || !uid || !chatFriend) return;
+    const amt = Number(debtAmount);
+    if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
+    setSubmitting(true);
+    const sb = getSupabase() as any;
+    if (!sb) { setSubmitting(false); return; }
+    const insertData: any = {
+      creditor: uid,
+      debtor: chatFriend.friend_id,
+      friendship_id: chatFriend.friendship_id,
+      amount: amt,
+      description: debtDesc || null,
+      status: "pending",
+      is_installment: isInstallment,
+    };
+    if (isInstallment) {
+      const total = Number(totalInstallments);
+      if (!total || total < 2) { setActionErr("عدد الأقساط لازم 2 على الأقل"); setSubmitting(false); return; }
+      insertData.total_installments = total;
+      insertData.installment_amount = Math.round((amt / total) * 100) / 100;
+      insertData.paid_installments = 0;
+      if (installmentStart) insertData.start_date = installmentStart;
+    }
+    const { error } = await sb.from("debt_requests").insert(insertData);
+    if (error) { setActionErr("تعذّر إرسال الطلب"); setSubmitting(false); return; }
+    // أرسل رسالة نظام في الشات
+    await sendSystemMessage(chatFriend.friendship_id,
+      (isInstallment ? "طلب دين بالأقساط: " : "طلب دين: ") + amt + " جنيه" + (debtDesc ? " — " + debtDesc : ""));
+    setDebtAmount(""); setDebtDesc(""); setIsInstallment(false); setTotalInstallments(""); setInstallmentStart("");
+    setChatShowDebt(false);
+    await load();
+    showToast("تم إرسال طلب الدين");
+    setSubmitting(false);
+  }
+
+  // إرسال تسوية من داخل الشات
+  async function sendChatSettlement() {
+    setActionErr("");
+    if (!settleAmount || !uid || !chatFriend) return;
+    const amt = Number(settleAmount);
+    if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
+    setSubmitting(true);
+    const sb = getSupabase() as any;
+    if (!sb) { setSubmitting(false); return; }
+    const { error } = await sb.from("settlements").insert({
+      from_user: uid,
+      to_user: chatFriend.friend_id,
+      friendship_id: chatFriend.friendship_id,
+      amount: amt,
+      description: settleDesc || null,
+      status: "pending",
+    });
+    if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
+    await sendSystemMessage(chatFriend.friendship_id,
+      "تسوية: " + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
+    setSettleAmount(""); setSettleDesc("");
+    setChatShowSettle(false);
+    await load();
+    showToast("تم إرسال طلب التسوية");
+    setSubmitting(false);
   }
 
   async function loadFriends(userId: string) {
@@ -660,8 +739,13 @@ export default function FriendsView() {
             const mine = m.sender_id === uid;
             if (m.type === "system") {
               return (
-                <div key={m.id} className="text-center">
-                  <span className="text-[10px] text-gray-400 bg-gray-100 rounded-full px-3 py-1">{m.content}</span>
+                <div key={m.id} className="text-center my-2">
+                  <span className="inline-block text-[11px] text-[var(--accent-dark)] bg-green-50 border border-green-100 rounded-xl px-3 py-1.5 font-bold">
+                    {m.content}
+                  </span>
+                  <div className="text-[9px] text-gray-300 mt-0.5">
+                    {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
                 </div>
               );
             }
@@ -681,6 +765,16 @@ export default function FriendsView() {
         </div>
 
         <div className="p-3 bg-white border-t border-[var(--soft)] flex items-center gap-2">
+          <button onClick={() => setChatShowDebt(true)}
+            className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0"
+            title="ليّ عنده">
+            <HandCoins size={18} className="text-[var(--accent)]" />
+          </button>
+          <button onClick={() => setChatShowSettle(true)}
+            className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0"
+            title="دفعت له">
+            <Banknote size={18} className="text-[var(--accent)]" />
+          </button>
           <input
             type="text"
             value={msgInput}
@@ -694,6 +788,74 @@ export default function FriendsView() {
             <Send size={18} />
           </button>
         </div>
+
+        {/* مودال طلب دين داخل الشات */}
+        {chatShowDebt && chatFriend && (
+          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowDebt(false)}>
+            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold mb-1">ليّ عنده</h3>
+              <p className="text-xs text-gray-400 mb-4">عندك فلوس عند {chatFriend.friend_phone}</p>
+              <input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)}
+                placeholder="المبلغ الإجمالي بالجنيه" required
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
+              <input type="text" value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)}
+                placeholder="وصف (اختياري)"
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+              <div className="flex gap-2 mb-3">
+                <button onClick={() => setIsInstallment(false)}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (!isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  دفعة واحدة
+                </button>
+                <button onClick={() => setIsInstallment(true)}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  أقساط
+                </button>
+              </div>
+              {isInstallment && (
+                <div className="space-y-2 mb-3">
+                  <input type="number" value={totalInstallments} onChange={(e) => setTotalInstallments(e.target.value)}
+                    placeholder="عدد الأقساط (مثلاً: 12)" min={2}
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  <input type="date" value={installmentStart} onChange={(e) => setInstallmentStart(e.target.value)}
+                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  {debtAmount && totalInstallments && Number(totalInstallments) > 0 && (
+                    <div className="bg-green-50 rounded-xl p-2 text-xs text-green-600 text-center">
+                      كل قسط: {Math.round((Number(debtAmount) / Number(totalInstallments)) * 100) / 100} جنيه × {totalInstallments} شهر
+                    </div>
+                  )}
+                </div>
+              )}
+              {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
+              <button onClick={sendChatDebtRequest} disabled={submitting}
+                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+                {submitting ? "جاري الإرسال..." : "إرسال طلب دين"}
+              </button>
+              <button onClick={() => setChatShowDebt(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
+
+        {/* مودال تسوية داخل الشات */}
+        {chatShowSettle && chatFriend && (
+          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowSettle(false)}>
+            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-bold mb-1">دفعت له</h3>
+              <p className="text-xs text-gray-400 mb-4">دفعت مبلغ لـ {chatFriend.friend_phone}</p>
+              <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
+                placeholder="المبلغ بالجنيه" required
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
+              <input type="text" value={settleDesc} onChange={(e) => setSettleDesc(e.target.value)}
+                placeholder="وصف الدفعة (اختياري)"
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+              {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
+              <button onClick={sendChatSettlement} disabled={submitting}
+                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+                {submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}
+              </button>
+              <button onClick={() => setChatShowSettle(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
