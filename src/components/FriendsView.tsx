@@ -17,6 +17,7 @@ interface Friend {
   gam3eya_my_turn: number | null;
   gam3eya_amount: number | null;
   gam3eya_start_date: string | null;
+  gam3eya_role: string;
 }
 
 interface PendingDebt {
@@ -77,6 +78,7 @@ export default function FriendsView() {
   const [gam3eyaMyTurn, setGam3eyaMyTurn] = useState("");
   const [gam3eyaAmount, setGam3eyaAmount] = useState("");
   const [gam3eyaStart, setGam3eyaStart] = useState("");
+  const [gam3eyaRole, setGam3eyaRole] = useState("member");
 
   function showToast(msg: string) {
     setToast(msg);
@@ -108,7 +110,7 @@ export default function FriendsView() {
     if (!sb) return;
     const { data: ships } = await sb
       .from("friendships")
-      .select("id, user_a, user_b, status, initiator, relationship_type, gam3eya_total, gam3eya_completed, gam3eya_my_turn, gam3eya_amount, gam3eya_start_date")
+      .select("id, user_a, user_b, status, initiator, relationship_type, gam3eya_total, gam3eya_completed, gam3eya_my_turn, gam3eya_amount, gam3eya_start_date, gam3eya_role")
       .or("user_a.eq." + userId + ",user_b.eq." + userId);
     if (!ships || ships.length === 0) { setFriends([]); return; }
     const friendList: Friend[] = [];
@@ -126,6 +128,7 @@ export default function FriendsView() {
         gam3eya_my_turn: ship.gam3eya_my_turn || null,
         gam3eya_amount: ship.gam3eya_amount ? Number(ship.gam3eya_amount) : null,
         gam3eya_start_date: ship.gam3eya_start_date || null,
+        gam3eya_role: ship.gam3eya_role || "member",
       });
     }
     setFriends(friendList);
@@ -309,10 +312,15 @@ export default function FriendsView() {
       const myTurn = Number(gam3eyaMyTurn);
       const amount = Number(gam3eyaAmount);
       if (!total || total < 2) { showToast("عدد الأدوار لازم 2 على الأقل"); return; }
-      if (!myTurn || myTurn < 1 || myTurn > total) { showToast("دورك يجب أن يكون بين 1 و " + total); return; }
+      if (gam3eyaRole === "member" && (!myTurn || myTurn < 1 || myTurn > total)) { showToast("دورك يجب أن يكون بين 1 و " + total); return; }
       if (!amount || amount <= 0) { showToast("المبلغ الشهري غير صحيح"); return; }
       updateData.gam3eya_total = total;
-      updateData.gam3eya_my_turn = myTurn;
+      updateData.gam3eya_role = gam3eyaRole;
+      if (gam3eyaRole === "member") {
+        updateData.gam3eya_my_turn = myTurn;
+      } else {
+        updateData.gam3eya_my_turn = null;
+      }
       updateData.gam3eya_amount = amount;
       updateData.gam3eya_completed = 0;
       if (gam3eyaStart) updateData.gam3eya_start_date = gam3eyaStart;
@@ -624,12 +632,16 @@ export default function FriendsView() {
           {/* تقدم الجمعية */}
           {selectedFriend.relationship === "association" && selectedFriend.gam3eya_total && (
             <div className="mb-4">
-              <h3 className="text-xs text-gray-400 mb-2">جمعية</h3>
+              <h3 className="text-xs text-gray-400 mb-2">جمعية {selectedFriend.gam3eya_role === "manager" ? "🏢 (مدير)" : "👤 (فرد)"}</h3>
               <div className="bg-white rounded-2xl p-3 border border-[var(--soft)]">
                 <div className="flex justify-between items-center mb-2">
-                  <div className="text-sm font-bold">دورك: {selectedFriend.gam3eya_my_turn}</div>
+                  <div className="text-sm font-bold">
+                    {selectedFriend.gam3eya_role === "manager" ? "أنت المدير" : "دورك: " + selectedFriend.gam3eya_my_turn}
+                  </div>
                   <div className="text-xs text-gray-400">
-                    {selectedFriend.gam3eya_completed >= selectedFriend.gam3eya_my_turn ? "استلمت دورك ✅" : "بانتظار دورك"}
+                    {selectedFriend.gam3eya_role === "manager"
+                      ? "Pot: " + (selectedFriend.gam3eya_total * (selectedFriend.gam3eya_amount || 0)) + " جنيه"
+                      : (selectedFriend.gam3eya_completed >= selectedFriend.gam3eya_my_turn ? "استلمت دورك ✅" : "بانتظار دورك")}
                   </div>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
@@ -920,12 +932,24 @@ export default function FriendsView() {
 
             {relationType === "association" && (
               <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+                <div className="flex gap-2">
+                  <button onClick={() => setGam3eyaRole("member")}
+                    className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (gam3eyaRole === "member" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                    فرد 👤
+                  </button>
+                  <button onClick={() => setGam3eyaRole("manager")}
+                    className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (gam3eyaRole === "manager" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                    مدير 💼
+                  </button>
+                </div>
                 <input type="number" value={gam3eyaTotal} onChange={(e) => setGam3eyaTotal(e.target.value)}
                   placeholder="عدد الأدوار الكلية" min={2}
                   className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
-                <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
-                  placeholder="دورك (رقم الدورة)" min={1}
-                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                {gam3eyaRole === "member" && (
+                  <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
+                    placeholder="دورك (رقم الدورة)" min={1}
+                    className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                )}
                 <input type="number" value={gam3eyaAmount} onChange={(e) => setGam3eyaAmount(e.target.value)}
                   placeholder="المبلغ الشهري" min={1}
                   className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
@@ -934,7 +958,8 @@ export default function FriendsView() {
                 {gam3eyaTotal && gam3eyaAmount && Number(gam3eyaTotal) > 0 && Number(gam3eyaAmount) > 0 && (
                   <div className="bg-green-50 rounded-lg p-2 text-xs text-green-600 text-center">
                     إجمالي الجمعية: {Number(gam3eyaTotal) * Number(gam3eyaAmount)} جنيه
-                    {gam3eyaMyTurn && Number(gam3eyaMyTurn) > 0 && " • دورك: " + gam3eyaMyTurn}
+                    {gam3eyaRole === "member" && gam3eyaMyTurn && Number(gam3eyaMyTurn) > 0 && " • دورك: " + gam3eyaMyTurn}
+                    {gam3eyaRole === "manager" && " • أنت المدير"}
                   </div>
                 )}
               </div>
@@ -998,12 +1023,24 @@ export default function FriendsView() {
 
             {relationType === "association" && (
               <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+                <div className="flex gap-2">
+                  <button onClick={() => setGam3eyaRole("member")}
+                    className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (gam3eyaRole === "member" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                    فرد 👤
+                  </button>
+                  <button onClick={() => setGam3eyaRole("manager")}
+                    className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (gam3eyaRole === "manager" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                    مدير 💼
+                  </button>
+                </div>
                 <input type="number" value={gam3eyaTotal} onChange={(e) => setGam3eyaTotal(e.target.value)}
                   placeholder="عدد الأدوار الكلية" min={2}
                   className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
-                <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
-                  placeholder="دورك (رقم الدورة)" min={1}
-                  className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                {gam3eyaRole === "member" && (
+                  <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
+                    placeholder="دورك (رقم الدورة)" min={1}
+                    className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                )}
                 <input type="number" value={gam3eyaAmount} onChange={(e) => setGam3eyaAmount(e.target.value)}
                   placeholder="المبلغ الشهري" min={1}
                   className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
@@ -1019,7 +1056,8 @@ export default function FriendsView() {
                   const updateData: any = { relationship_type: relationType };
                   if (relationType === "association") {
                     if (gam3eyaTotal) updateData.gam3eya_total = Number(gam3eyaTotal);
-                    if (gam3eyaMyTurn) updateData.gam3eya_my_turn = Number(gam3eyaMyTurn);
+                    if (gam3eyaRole) updateData.gam3eya_role = gam3eyaRole;
+                    if (gam3eyaRole === "member" && gam3eyaMyTurn) updateData.gam3eya_my_turn = Number(gam3eyaMyTurn);
                     if (gam3eyaAmount) updateData.gam3eya_amount = Number(gam3eyaAmount);
                     if (gam3eyaStart) updateData.gam3eya_start_date = gam3eyaStart;
                   }
