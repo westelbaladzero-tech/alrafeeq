@@ -75,6 +75,13 @@ export default function Home() {
           </div>
         </header>
 
+        {/* آية كريمة */}
+        <div className="bg-gradient-to-l from-green-50/50 to-transparent text-center py-1 px-4 shrink-0">
+          <p className="text-[10px] text-gray-400 font-medium">
+            ﴿ وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ عَلَيْهِ تَوَكَّلْتُ وَإِلَيْهِ أُنِيبُ ﴾
+          </p>
+        </div>
+
         {/* بانر التثبيت + شريط أدوات */}
         <InstallAndSupport />
 
