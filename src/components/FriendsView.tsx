@@ -18,6 +18,7 @@ interface Friend {
   gam3eya_amount: number | null;
   gam3eya_start_date: string | null;
   gam3eya_role: string;
+  unread_count: number;
 }
 
 interface PendingDebt {
@@ -31,6 +32,7 @@ interface PendingDebt {
   installment_amount: number | null;
   paid_installments: number | null;
   start_date: string | null;
+  friend_id: string;
 }
 
 interface PendingSettlement {
@@ -38,6 +40,7 @@ interface PendingSettlement {
   amount: number;
   you_are: "sender" | "receiver";
   created_at: string;
+  friend_id: string;
 }
 
 export default function FriendsView() {
@@ -295,6 +298,12 @@ export default function FriendsView() {
       const { data: profile } = await sb.rpc("get_friend_profile", { friend_id: friendId });
       const p = profile && profile.length > 0 ? profile[0] : null;
       const balance = await calculateBalance(sb, userId, friendId);
+      // عد الرسائل غير المقروءة
+      const { count: unread } = await sb.from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("friendship_id", ship.id)
+        .neq("sender_id", userId)
+        .is("read_at", null);
       friendList.push({
         friendship_id: ship.id, friend_id: friendId,
         friend_phone: p?.phone || "غير معروف",
@@ -306,6 +315,7 @@ export default function FriendsView() {
         gam3eya_amount: ship.gam3eya_amount ? Number(ship.gam3eya_amount) : null,
         gam3eya_start_date: ship.gam3eya_start_date || null,
         gam3eya_role: ship.gam3eya_role || "member",
+        unread_count: unread || 0,
       });
     }
     setFriends(friendList);
@@ -352,6 +362,7 @@ export default function FriendsView() {
         installment_amount: d.installment_amount ? Number(d.installment_amount) : null,
         paid_installments: d.paid_installments || 0,
         start_date: d.start_date || null,
+        friend_id: d.creditor === userId ? d.debtor : d.creditor,
       });
     }
     setPendingDebts(all);
@@ -372,6 +383,7 @@ export default function FriendsView() {
         id: s.id, amount: Number(s.amount),
         you_are: s.from_user === userId ? "sender" : "receiver",
         created_at: s.created_at,
+        friend_id: s.from_user === userId ? s.to_user : s.from_user,
       });
     }
     setPendingSetts(all);
@@ -934,10 +946,64 @@ export default function FriendsView() {
             </button>
           </div>
 
-          {pendingDebts.filter((d) => d.you_are === "creditor").length > 0 && (
+          {/* طلبات معلّقة لهذا الصديق */}
+          {pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "debtor").length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">طلبات ديون عليك</h3>
+              {pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "debtor").map((d) => (
+                <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-sm font-bold">عليك {d.amount} جنيه</div>
+                    <div className="flex gap-1">
+                      <button onClick={() => respondDebt(d.id, true)}
+                        className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
+                        <Check size={14} /> موافق
+                      </button>
+                      <button onClick={() => respondDebt(d.id, false)}
+                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
+                        <X size={14} /> رفض
+                      </button>
+                    </div>
+                  </div>
+                  {d.description && <div className="text-xs text-gray-400">{d.description}</div>}
+                  {d.is_installment && d.total_installments && (
+                    <div className="text-[10px] text-green-600 mt-1 bg-green-50 rounded-lg px-2 py-1">
+                      أقساط: {d.total_installments} × {d.installment_amount} جنيه
+                      {d.start_date && " • يبدأ من " + new Date(d.start_date).toLocaleDateString("ar-EG")}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {pendingSetts.filter((s) => s.friend_id === selectedFriend.friend_id && s.you_are === "receiver").length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">تأكيد استلام</h3>
+              {pendingSetts.filter((s) => s.friend_id === selectedFriend.friend_id && s.you_are === "receiver").map((s) => (
+                <div key={s.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-sm font-bold">استلمت {s.amount} جنيه</div>
+                    <div className="flex gap-1">
+                      <button onClick={() => respondSettlement(s.id, true)}
+                        className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
+                        <Check size={14} /> أكدت
+                      </button>
+                      <button onClick={() => respondSettlement(s.id, false)}
+                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
+                        <X size={14} /> ما استلمت
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "creditor").length > 0 && (
             <div className="mb-4">
               <h3 className="text-xs text-gray-400 mb-2">طلبات دين أرسلتها</h3>
-              {pendingDebts.filter((d) => d.you_are === "creditor").map((d) => (
+              {pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "creditor").map((d) => (
                 <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
                   <div className="flex justify-between items-center">
                     <div className="text-sm font-bold">لك {d.amount} جنيه</div>
@@ -955,10 +1021,10 @@ export default function FriendsView() {
             </div>
           )}
 
-          {pendingSetts.filter((s) => s.you_are === "sender").length > 0 && (
+          {pendingSetts.filter((s) => s.friend_id === selectedFriend.friend_id && s.you_are === "sender").length > 0 && (
             <div className="mb-4">
               <h3 className="text-xs text-gray-400 mb-2">تسويات أرسلتها</h3>
-              {pendingSetts.filter((s) => s.you_are === "sender").map((s) => (
+              {pendingSetts.filter((s) => s.friend_id === selectedFriend.friend_id && s.you_are === "sender").map((s) => (
                 <div key={s.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
                   <div className="flex justify-between items-center">
                     <div className="text-sm font-bold">دفعت {s.amount} جنيه</div>
@@ -1149,7 +1215,14 @@ export default function FriendsView() {
     <div className="h-full overflow-y-auto bg-[var(--bg)]">
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-[var(--accent-dark)]">الأصدقاء</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-[var(--accent-dark)]">الأصدقاء</h2>
+            {friends.reduce((s, f) => s + f.unread_count, 0) > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1.5">
+                {friends.reduce((s, f) => s + f.unread_count, 0)}
+              </span>
+            )}
+          </div>
           <button onClick={() => setShowAdd(true)}
             className="flex items-center gap-1.5 bg-[var(--accent)] text-white px-3 py-2 rounded-xl text-sm font-bold">
             <UserPlus size={16} /> أضف صديق
@@ -1180,59 +1253,19 @@ export default function FriendsView() {
           </div>
         )}
 
-        {pendingDebts.filter((d) => d.you_are === "debtor").length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-xs text-gray-400 mb-2">طلبات ديون عليك</h3>
-            {pendingDebts.filter((d) => d.you_are === "debtor").map((d) => (
-              <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-bold">عليك {d.amount} جنيه</div>
-                  <div className="flex gap-1">
-                    <button onClick={() => respondDebt(d.id, true)}
-                      className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
-                      <Check size={14} /> موافق
-                    </button>
-                    <button onClick={() => respondDebt(d.id, false)}
-                      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
-                      <X size={14} /> رفض
-                    </button>
-                  </div>
-                </div>
-                {d.description && <div className="text-xs text-gray-400">{d.description}</div>}
-                {d.is_installment && d.total_installments && (
-                  <div className="text-[10px] text-green-600 mt-1 bg-green-50 rounded-lg px-2 py-1">
-                    أقساط: {d.total_installments} × {d.installment_amount} جنيه
-                    {d.paid_installments ? " • مسدّد " + d.paid_installments + "/" + d.total_installments : ""}
-                    {d.start_date && " • يبدأ من " + new Date(d.start_date).toLocaleDateString("ar-EG")}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {pendingSetts.filter((s) => s.you_are === "receiver").length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-xs text-gray-400 mb-2">تأكيد استلام</h3>
-            {pendingSetts.filter((s) => s.you_are === "receiver").map((s) => (
-              <div key={s.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-bold">استلمت {s.amount} جنيه</div>
-                  <div className="flex gap-1">
-                    <button onClick={() => respondSettlement(s.id, true)}
-                      className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
-                      <Check size={14} /> أكدت
-                    </button>
-                    <button onClick={() => respondSettlement(s.id, false)}
-                      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
-                      <X size={14} /> ما استلمت
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* ملخص الطلبات المعلّقة */}
+        {(() => {
+          const pendingCount = pendingDebts.filter((d) => d.you_are === "debtor").length
+            + pendingSetts.filter((s) => s.you_are === "receiver").length;
+          if (pendingCount === 0) return null;
+          return (
+            <div className="mb-3 bg-amber-50 border border-amber-100 rounded-xl p-2.5 text-center">
+              <span className="text-xs text-amber-600 font-bold">
+                لديك {pendingCount} طلب معلّق — افتح صفحة الصديق للتأكيد
+              </span>
+            </div>
+          );
+        })()}
 
         <h3 className="text-xs text-gray-400 mb-2">أصدقائك</h3>
         {friends.filter((f) => f.status === "accepted").length === 0 ? (
@@ -1250,8 +1283,15 @@ export default function FriendsView() {
                 setSelectedFriend(f);
                 getResolvedUserId().then((myId) => { if (myId) loadFriendDetails(myId, f.friend_id); });
               }} className="flex items-center gap-3 flex-1">
-                <div className="w-10 h-10 rounded-full bg-[var(--soft)] flex items-center justify-center">
-                  <Wallet size={18} className="text-[var(--accent)]" />
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full bg-[var(--soft)] flex items-center justify-center">
+                    <Wallet size={18} className="text-[var(--accent)]" />
+                  </div>
+                  {f.unread_count > 0 && (
+                    <span className="absolute -top-1 -left-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1">
+                      {f.unread_count}
+                    </span>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-bold">{f.friend_phone}</div>
@@ -1261,10 +1301,24 @@ export default function FriendsView() {
                   </div>
                 </div>
               </button>
-              <button onClick={(e) => { e.stopPropagation(); openChat(f); }}
-                className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0">
-                <MessageCircle size={18} className="text-[var(--accent)]" />
-              </button>
+              <div className="relative">
+                <button onClick={(e) => { e.stopPropagation(); openChat(f); }}
+                  className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0">
+                  <MessageCircle size={18} className="text-[var(--accent)]" />
+                </button>
+                {(() => {
+                  const friendPending = pendingDebts.filter((d) => d.friend_id === f.friend_id && d.you_are === "debtor").length
+                    + pendingSetts.filter((s) => s.friend_id === f.friend_id && s.you_are === "receiver").length;
+                  if (friendPending > 0) {
+                    return (
+                      <span className="absolute -top-1 -right-1 bg-amber-400 text-white text-[8px] font-bold rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-0.5">
+                        {friendPending}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
             </div>
           ))
         )}
