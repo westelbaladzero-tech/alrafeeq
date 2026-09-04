@@ -91,6 +91,7 @@ export default function FriendsView() {
   const [settleDirection, setSettleDirection] = useState<"me" | "friend">("me");
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
+  const friendsRef = useRef<Friend[]>([]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -120,6 +121,24 @@ export default function FriendsView() {
     await loadPendingSettlements(userId);
     setLoading(false);
     setIsInitialLoad(false);
+    // استعد الصديق المحدد أو الشات المحفوظ
+    const savedChat = localStorage.getItem("alrafeeq-chat-ship");
+    const savedFriend = localStorage.getItem("alrafeeq-selected-ship");
+    if (savedChat) {
+      // ابحث عن الصديق في القائمة المحمّلة
+      setTimeout(() => {
+        const f = friendsRef.current.find((x) => x.friendship_id === savedChat);
+        if (f) openChat(f);
+      }, 100);
+    } else if (savedFriend) {
+      setTimeout(() => {
+        const f = friendsRef.current.find((x) => x.friendship_id === savedFriend);
+        if (f) {
+          setSelectedFriend(f);
+          loadFriendDetails(userId, f.friend_id);
+        }
+      }, 100);
+    }
   }
 
   // تحديث خفيف: يبحث عن طلبات معلّقة جديدة فقط — لا يلمس قائمة الأصدقاء
@@ -133,6 +152,8 @@ export default function FriendsView() {
   // ─── الشات ───
   async function openChat(friend: Friend) {
     setChatFriend(friend);
+    localStorage.setItem("alrafeeq-chat-ship", friend.friendship_id);
+    localStorage.removeItem("alrafeeq-selected-ship");
     setMessages([]);
     await loadMessages(friend.friendship_id);
     subscribeToMessages(friend.friendship_id);
@@ -143,6 +164,7 @@ export default function FriendsView() {
       chatChannelRef.current.unsubscribe();
       chatChannelRef.current = null;
     }
+    localStorage.removeItem("alrafeeq-chat-ship");
     setChatFriend(null);
     setMessages([]);
     setMsgInput("");
@@ -326,6 +348,7 @@ export default function FriendsView() {
       });
     }
     setFriends(friendList);
+    friendsRef.current = friendList;
     // أرسل إجمالي الرسائل غير المقروءة للتبويب
     const totalUnread = friendList.reduce((s, f) => s + f.unread_count, 0);
     window.dispatchEvent(new CustomEvent("friends-unread-update", { detail: totalUnread }));
@@ -916,7 +939,7 @@ export default function FriendsView() {
     return (
       <div className="h-full overflow-y-auto bg-[var(--bg)]">
         <div className="p-4">
-          <button onClick={() => setSelectedFriend(null)}
+          <button onClick={() => { setSelectedFriend(null); localStorage.removeItem("alrafeeq-selected-ship"); }}
             className="flex items-center gap-1 text-gray-400 text-sm mb-4">
             <ArrowLeft size={16} /> رجوع
           </button>
@@ -1415,6 +1438,8 @@ export default function FriendsView() {
             <div key={f.friendship_id} className="w-full bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)] flex items-center justify-between">
               <button onClick={() => {
                 setSelectedFriend(f);
+                localStorage.setItem("alrafeeq-selected-ship", f.friendship_id);
+                localStorage.removeItem("alrafeeq-chat-ship");
                 getResolvedUserId().then((myId) => { if (myId) loadFriendDetails(myId, f.friend_id); });
               }} className="flex items-center gap-3 flex-1">
                 <div className="relative">

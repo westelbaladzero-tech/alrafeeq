@@ -35,11 +35,12 @@ export default function Home() {
   // امنع زر الرجوع من الخروج من التطبيق
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // أضف حالة للتاريخ حتى لا يخرج زر الرجوع من التطبيق
-    window.history.pushState({ app: "alrafeeq" }, "");
+    // استبدل الحالة الحالية وأضف حالة إضافية كحاجز
+    window.history.replaceState({ app: "alrafeeq", idx: 0 }, "");
+    window.history.pushState({ app: "alrafeeq", idx: 1 }, "");
     const handler = (e: PopStateEvent) => {
-      // أعد الدفع ليبقى داخل التطبيق
-      window.history.pushState({ app: "alrafeeq" }, "");
+      // أعد الدفع فوراً ليبقى حاجز من حاجزين دائماً
+      window.history.pushState({ app: "alrafeeq", idx: Date.now() }, "");
     };
     window.addEventListener("popstate", handler);
     return () => window.removeEventListener("popstate", handler);
