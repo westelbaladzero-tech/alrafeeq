@@ -103,13 +103,24 @@ export default function FriendsView() {
   useEffect(() => {
     load();
     const interval = setInterval(pollPending, 15000);
+    // استمع لزر الرجوع — تنقّل داخلي بدل الخروج
+    const backHandler = () => {
+      if (chatFriend) {
+        closeChat();
+      } else if (selectedFriend) {
+        setSelectedFriend(null);
+        localStorage.removeItem("alrafeeq-selected-ship");
+      }
+    };
+    window.addEventListener("app-back", backHandler);
     return () => {
       clearInterval(interval);
+      window.removeEventListener("app-back", backHandler);
       if (chatChannelRef.current) {
         chatChannelRef.current.unsubscribe();
       }
     };
-  }, []);
+  }, [chatFriend, selectedFriend]);
 
   async function load() {
     if (isInitialLoad) setLoading(true);

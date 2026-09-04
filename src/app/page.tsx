@@ -32,19 +32,8 @@ export default function Home() {
     localStorage.setItem("alrafeeq-tab", tab);
   }, [tab]);
 
-  // امنع زر الرجوع من الخروج من التطبيق
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    // استبدل الحالة الحالية وأضف حالة إضافية كحاجز
-    window.history.replaceState({ app: "alrafeeq", idx: 0 }, "");
-    window.history.pushState({ app: "alrafeeq", idx: 1 }, "");
-    const handler = (e: PopStateEvent) => {
-      // أعد الدفع فوراً ليبقى حاجز من حاجزين دائماً
-      window.history.pushState({ app: "alrafeeq", idx: Date.now() }, "");
-    };
-    window.addEventListener("popstate", handler);
-    return () => window.removeEventListener("popstate", handler);
-  }, []);
+  // زر الرجوع يعمل طبيعياً (رجوع/إغلاق)
+  // AuthGate يمنع تسجيل الخروج عبر احترام localStorage
 
   // استمع لتحديثات عدد الرسائل غير المقروءة من FriendsView
   useEffect(() => {
