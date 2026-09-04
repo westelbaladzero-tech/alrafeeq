@@ -16,10 +16,28 @@ type Tab = "chat" | "dashboard" | "history" | "friends";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
+  const [friendsUnread, setFriendsUnread] = useState(0);
 
   useEffect(() => {
     initSync();
   }, []);
+
+  // استمع لتحديثات عدد الرسائل غير المقروءة من FriendsView
+  useEffect(() => {
+    function handleUnreadUpdate(e: Event) {
+      const total = (e as CustomEvent).detail as number;
+      if (tab !== "friends") {
+        setFriendsUnread(total);
+      }
+    }
+    window.addEventListener("friends-unread-update", handleUnreadUpdate);
+    return () => window.removeEventListener("friends-unread-update", handleUnreadUpdate);
+  }, [tab]);
+
+  function openTab(t: Tab) {
+    setTab(t);
+    if (t === "friends") setFriendsUnread(0);
+  }
 
   async function handleLogout() {
     // امسح المعرّفات المحلية المخزنة لمنع تسريب البيانات بين الحسابات
@@ -73,20 +91,28 @@ export default function Home() {
 
         {/* التبويبات */}
         <nav className="flex justify-around py-1.5 px-2 bg-white border-t border-[var(--soft)] shrink-0">
-          <TabBtn active={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
-          <TabBtn active={tab === "friends"} onClick={() => setTab("friends")} icon={<UserPlus size={20} />} label="أصدقاء" />
-          <TabBtn active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
-          <TabBtn active={tab === "history"} onClick={() => setTab("history")} icon={<Receipt size={20} />} label="سجل" />
+          <TabBtn active={tab === "chat"} onClick={() => openTab("chat")} icon={<MessageCircle size={20} />} label="محادثة" />
+          <TabBtn active={tab === "friends"} onClick={() => openTab("friends")} icon={<UserPlus size={20} />} label="أصدقاء" badge={friendsUnread} />
+          <TabBtn active={tab === "dashboard"} onClick={() => openTab("dashboard")} icon={<Users size={20} />} label="حسابات" />
+          <TabBtn active={tab === "history"} onClick={() => openTab("history")} icon={<Receipt size={20} />} label="سجل" />
         </nav>
       </main>
     </AuthGate>
   );
 }
 
-function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function TabBtn({ active, onClick, icon, label, badge }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }) {
   return (
-    <button onClick={onClick} className={"flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition " + (active ? "text-[var(--accent)] font-bold" : "text-gray-400")}>
-      {icon}<span className="text-[11px]">{label}</span>
+    <button onClick={onClick} className={"relative flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-xl transition " + (active ? "text-[var(--accent)] font-bold" : "text-gray-400")}>
+      <div className="relative">
+        {icon}
+        {badge !== undefined && badge > 0 && (
+          <span className="absolute -top-1.5 -left-2 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1">
+            {badge}
+          </span>
+        )}
+      </div>
+      <span className="text-[11px]">{label}</span>
     </button>
   );
 }

@@ -146,6 +146,8 @@ export default function FriendsView() {
     setChatFriend(null);
     setMessages([]);
     setMsgInput("");
+    // حدّث قائمة الأصدقاء لإزالة مؤشر الرسائل غير المقروءة
+    if (uid) loadFriends(uid);
   }
 
   async function loadMessages(friendshipId: string) {
@@ -319,6 +321,9 @@ export default function FriendsView() {
       });
     }
     setFriends(friendList);
+    // أرسل إجمالي الرسائل غير المقروءة للتبويب
+    const totalUnread = friendList.reduce((s, f) => s + f.unread_count, 0);
+    window.dispatchEvent(new CustomEvent("friends-unread-update", { detail: totalUnread }));
   }
 
   async function calculateBalance(sb: any, me: string, friend: string): Promise<number> {
@@ -586,19 +591,24 @@ export default function FriendsView() {
   async function verifyPinAndExecute() {
     setPinErr("");
     if (!pinInput) { setPinErr("اكتب الرمز"); return; }
+    if (!uid) { setPinErr("انتهت الجلسة — سجّل دخولك"); setPinVerifying(false); return; }
     setPinVerifying(true);
 
     const sb = getSupabase() as any;
     if (!sb) { setPinVerifying(false); return; }
 
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) { setPinErr("انتهت الجلسة"); setPinVerifying(false); return; }
+    // حاول getSession أولاً، لو فشل استخدم uid كـ fallback
+    let accessToken: string | null = null;
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) accessToken = session.access_token;
+    } catch {}
 
     try {
       const res = await fetch("/api/verify-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pinInput, accessToken: session.access_token }),
+        body: JSON.stringify({ pin: pinInput, accessToken, userId: uid }),
       });
       const data = await res.json();
 
