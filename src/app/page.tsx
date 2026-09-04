@@ -18,8 +18,31 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
   const [friendsUnread, setFriendsUnread] = useState(0);
 
+  // استعد التبويب المحفوظ عند التحميل
   useEffect(() => {
     initSync();
+    const saved = localStorage.getItem("alrafeeq-tab");
+    if (saved && ["chat", "friends", "dashboard", "history"].includes(saved)) {
+      setTab(saved as Tab);
+    }
+  }, []);
+
+  // احفظ التبويب عند تغييره
+  useEffect(() => {
+    localStorage.setItem("alrafeeq-tab", tab);
+  }, [tab]);
+
+  // امنع زر الرجوع من الخروج من التطبيق
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // أضف حالة للتاريخ حتى لا يخرج زر الرجوع من التطبيق
+    window.history.pushState({ app: "alrafeeq" }, "");
+    const handler = (e: PopStateEvent) => {
+      // أعد الدفع ليبقى داخل التطبيق
+      window.history.pushState({ app: "alrafeeq" }, "");
+    };
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
   }, []);
 
   // استمع لتحديثات عدد الرسائل غير المقروءة من FriendsView
