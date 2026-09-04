@@ -264,19 +264,24 @@ export default function FriendsView() {
     const amt = Number(settleAmount);
     if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
     setSubmitting(true);
-    const sb = getSupabase() as any;
-    if (!sb) { setSubmitting(false); return; }
     const fromUser = settleDirection === "me" ? uid : chatFriend.friend_id;
     const toUser = settleDirection === "me" ? chatFriend.friend_id : uid;
-    const { error } = await sb.from("settlements").insert({
-      from_user: fromUser,
-      to_user: toUser,
-      friendship_id: chatFriend.friendship_id,
-      amount: amt,
-      description: settleDesc || null,
-      status: "pending",
-    });
-    if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
+    try {
+      const res = await fetch("/api/settlement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_user: fromUser,
+          to_user: toUser,
+          friendship_id: chatFriend.friendship_id,
+          amount: amt,
+          description: settleDesc || null,
+          status: "pending",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { setActionErr(data.error || "تعذّر إرسال التسوية"); setSubmitting(false); return; }
+    } catch { setActionErr("خطأ في الاتصال"); setSubmitting(false); return; }
     await sendSystemMessage(chatFriend.friendship_id,
       (settleDirection === "me" ? "لي عنده: " : "أخذت منه: ") + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
     setSettleAmount(""); setSettleDesc(""); setSettleDirection("me");
@@ -720,19 +725,24 @@ export default function FriendsView() {
     const amt = Number(settleAmount);
     if (isNaN(amt) || amt <= 0) { setActionErr("مبلغ غير صحيح"); return; }
     setSubmitting(true);
-    const sb = getSupabase() as any;
-    if (!sb) { setSubmitting(false); return; }
     const fromUser = settleDirection === "me" ? uid : selectedFriend.friend_id;
     const toUser = settleDirection === "me" ? selectedFriend.friend_id : uid;
-    const { error } = await sb.from("settlements").insert({
-      from_user: fromUser,
-      to_user: toUser,
-      friendship_id: selectedFriend.friendship_id,
-      amount: amt,
-      description: settleDesc || null,
-      status: "pending",
-    });
-    if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
+    try {
+      const res = await fetch("/api/settlement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_user: fromUser,
+          to_user: toUser,
+          friendship_id: selectedFriend.friendship_id,
+          amount: amt,
+          description: settleDesc || null,
+          status: "pending",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { setActionErr(data.error || "تعذّر إرسال التسوية"); setSubmitting(false); return; }
+    } catch { setActionErr("خطأ في الاتصال"); setSubmitting(false); return; }
     setSettleAmount(""); setSettleDesc(""); setSettleDirection("me"); setShowSettle(false); await load();
     showToast("تم إرسال طلب التسوية");
     setSubmitting(false);
