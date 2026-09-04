@@ -1216,6 +1216,120 @@ export default function FriendsView() {
             </div>
           </div>
         )}
+
+        {/* مودال PIN — مطلوب لزر التأكيد */}
+        {showPin && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPin(false)}>
+            <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-[var(--soft)] flex items-center justify-center mx-auto mb-2">
+                  <Lock size={22} className="text-[var(--accent)]" />
+                </div>
+                <h3 className="text-base font-bold">تأكيد بالرمز</h3>
+                <p className="text-xs text-gray-400 mt-1">اكتب رمز الحماية للتأكيد</p>
+              </div>
+              <input type="password" value={pinInput} onChange={(e) => setPinInput(e.target.value)}
+                placeholder="••••" maxLength={8}
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-center text-lg tracking-widest" />
+              {pinErr && <div className="text-red-500 text-sm mb-2 text-center">{pinErr}</div>}
+              <button onClick={verifyPinAndExecute} disabled={pinVerifying}
+                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+                {pinVerifying ? "جاري التحقق..." : "تأكيد"}
+              </button>
+              <button onClick={() => { setShowPin(false); setPinInput(""); setPinErr(""); setPendingAction(null); }}
+                className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
+
+        {/* مودال تغيير العلاقة — مطلوب في صفحة الصديق */}
+        {showChangeRelation && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowChangeRelation(false)}>
+            <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-bold text-center mb-1">غيّر نوع العلاقة</h3>
+              <p className="text-xs text-gray-400 text-center mb-4">النوع الحالي: {getRelationLabel(relationType)}</p>
+              <div className="space-y-2">
+                {[
+                  { value: "friend", label: "صديق", emoji: "🤝" },
+                  { value: "employer", label: "صاحب عمل", emoji: "💼" },
+                  { value: "colleague", label: "أعمل مع", emoji: "👥" },
+                  { value: "partner", label: "شريك", emoji: "🤝" },
+                  { value: "client", label: "عميل", emoji: "📋" },
+                  { value: "association", label: "جمعية", emoji: "🔄" },
+                ].map((opt) => (
+                  <button key={opt.value} onClick={() => setRelationType(opt.value)}
+                    className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
+                    <span className="text-xl">{opt.emoji}</span>
+                    <span className="text-sm font-bold">{opt.label}</span>
+                    {relationType === opt.value && <Check size={16} className="text-[var(--accent)] mr-auto" />}
+                  </button>
+                ))}
+              </div>
+              {relationType === "association" && (
+                <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex gap-2">
+                    <button onClick={() => setGam3eyaRole("member")}
+                      className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (gam3eyaRole === "member" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                      فرد 👤
+                    </button>
+                    <button onClick={() => setGam3eyaRole("manager")}
+                      className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (gam3eyaRole === "manager" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                      مدير 💼
+                    </button>
+                  </div>
+                  <input type="number" value={gam3eyaTotal} onChange={(e) => setGam3eyaTotal(e.target.value)}
+                    placeholder="عدد الأدوار الكلية" min={2}
+                    className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  {gam3eyaRole === "member" && (
+                    <input type="number" value={gam3eyaMyTurn} onChange={(e) => setGam3eyaMyTurn(e.target.value)}
+                      placeholder="دورك (رقم الدورة)" min={1}
+                      className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  )}
+                  <input type="number" value={gam3eyaAmount} onChange={(e) => setGam3eyaAmount(e.target.value)}
+                    placeholder="المبلغ الشهري" min={1}
+                    className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                  <input type="date" value={gam3eyaStart} onChange={(e) => setGam3eyaStart(e.target.value)}
+                    className="w-full bg-gray-50 rounded-xl px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                </div>
+              )}
+              <button onClick={async () => {
+                if (relationType && relationForShip) {
+                  const sb = getSupabase() as any;
+                  if (sb) {
+                    const updateData: any = { relationship_type: relationType };
+                    if (relationType === "association") {
+                      if (gam3eyaTotal) updateData.gam3eya_total = Number(gam3eyaTotal);
+                      if (gam3eyaRole) updateData.gam3eya_role = gam3eyaRole;
+                      if (gam3eyaRole === "member" && gam3eyaMyTurn) updateData.gam3eya_my_turn = Number(gam3eyaMyTurn);
+                      if (gam3eyaAmount) updateData.gam3eya_amount = Number(gam3eyaAmount);
+                      if (gam3eyaStart) updateData.gam3eya_start_date = gam3eyaStart;
+                    }
+                    await sb.from("friendships").update(updateData).eq("id", relationForShip);
+                    showToast("تم تحديث العلاقة");
+                    setShowChangeRelation(false);
+                    setRelationForShip(null);
+                    setGam3eyaTotal(""); setGam3eyaMyTurn(""); setGam3eyaAmount(""); setGam3eyaStart(""); setGam3eyaRole("member");
+                    if (selectedFriend) {
+                      const sf: Friend = selectedFriend;
+                      const updated: Friend = { ...sf, relationship: relationType, gam3eya_role: relationType === "association" ? gam3eyaRole : sf.gam3eya_role };
+                      setSelectedFriend(updated);
+                    }
+                    await load();
+                  }
+                }
+              }} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold text-sm mt-4">
+                حفظ
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Toast */}
+        {toast && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[var(--accent-dark)] text-white text-sm px-5 py-2.5 rounded-full shadow-lg animate-fade-in">
+            {toast}
+          </div>
+        )}
       </div>
     );
   }
