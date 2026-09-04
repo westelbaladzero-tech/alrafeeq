@@ -273,7 +273,7 @@ export default function FriendsView() {
     });
     if (error) { setActionErr("تعذّر إرسال التسوية"); setSubmitting(false); return; }
     await sendSystemMessage(chatFriend.friendship_id,
-      (settleDirection === "me" ? "دفعت له: " : "سدد لي: ") + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
+      (settleDirection === "me" ? "لي عنده: " : "أخذت منه: ") + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
     setSettleAmount(""); setSettleDesc(""); setSettleDirection("me");
     setChatShowSettle(false);
     await load();
@@ -853,11 +853,11 @@ export default function FriendsView() {
               <div className="flex gap-2 mb-3">
                 <button onClick={() => setSettleDirection("me")}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  أنا دفعت له
+                  لي عنده
                 </button>
                 <button onClick={() => setSettleDirection("friend")}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  هو سدد لي
+                  أخذت منه
                 </button>
               </div>
               <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
@@ -1118,11 +1118,11 @@ export default function FriendsView() {
               <div className="flex gap-2 mb-3">
                 <button onClick={() => setSettleDirection("me")}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  أنا دفعت له
+                  لي عنده
                 </button>
                 <button onClick={() => setSettleDirection("friend")}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  هو سدد لي
+                  أخذت منه
                 </button>
               </div>
               <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
