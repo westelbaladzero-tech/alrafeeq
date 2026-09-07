@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Download, MessageCircle, X } from "lucide-react";
+import { Download, MessageCircle, X, Share } from "lucide-react";
 
 const WHATSAPP_NUMBER = "201050909821";
 
@@ -8,6 +8,7 @@ export default function InstallAndSupport() {
   const [installEvent, setInstallEvent] = useState<any>(null);
   const [installed, setInstalled] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches ||
@@ -44,14 +45,17 @@ export default function InstallAndSupport() {
   }, []);
 
   async function handleInstall() {
-    if (!installEvent) return;
-    installEvent.prompt();
-    const { outcome } = await installEvent.userChoice;
-    if (outcome === "accepted") {
-      setInstalled(true);
-      setShowBanner(false);
+    if (installEvent) {
+      installEvent.prompt();
+      const { outcome } = await installEvent.userChoice;
+      if (outcome === "accepted") {
+        setInstalled(true);
+        setShowBanner(false);
+      }
+      setInstallEvent(null);
+      return;
     }
-    setInstallEvent(null);
+    setShowGuide(true);
   }
 
   function openWhatsApp() {
@@ -59,9 +63,12 @@ export default function InstallAndSupport() {
     window.open("https://wa.me/" + WHATSAPP_NUMBER + "?text=" + msg, "_blank");
   }
 
+  const isIOS = typeof navigator !== "undefined" &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(window as any).MSStream;
+
   return (
     <>
-      {/* بانر التثبيت — يدفن المحتوى مو يغطيه */}
       {showBanner && !installed && (
         <div className="bg-[var(--accent)] text-white px-4 py-2 flex items-center gap-3 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
@@ -81,9 +88,8 @@ export default function InstallAndSupport() {
         </div>
       )}
 
-      {/* شريط أدوات رفيع — حدود شاشة مو عائم */}
       <div className="flex items-center justify-center gap-6 px-4 py-1 bg-white border-t border-[var(--soft)] shrink-0">
-        {installEvent && !installed && (
+        {!installed && (
           <button onClick={handleInstall}
             className="flex items-center gap-1 text-xs text-[var(--accent)] font-bold">
             <Download size={14} /> تثبيت
@@ -99,6 +105,60 @@ export default function InstallAndSupport() {
           <MessageCircle size={14} /> دعم
         </button>
       </div>
+
+      {showGuide && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowGuide(false)}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold text-[var(--accent-dark)]">تثبيت التطبيق</h3>
+              <button onClick={() => setShowGuide(false)} className="text-gray-300">
+                <X size={18} />
+              </button>
+            </div>
+
+            {isIOS ? (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400">للتثبيت على iPhone:</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                    <Share size={14} className="text-blue-500" />
+                  </span>
+                  <span>اضغط زر المشاركة <strong>في أسفل Safari</strong></span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0 text-blue-500 font-bold text-xs">2</span>
+                  <span>اختر <strong>«إضافة إلى الشاشة الرئيسية»</strong></span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0 text-blue-500 font-bold text-xs">3</span>
+                  <span>اضغط <strong>«إضافة»</strong></span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400">للتثبيت على Android:</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-green-50 flex items-center justify-center shrink-0 text-green-600 font-bold text-xs">1</span>
+                  <span>اضغط <strong>القائمة ⋮</strong> في Chrome</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-green-50 flex items-center justify-center shrink-0 text-green-600 font-bold text-xs">2</span>
+                  <span>اختر <strong>«إضافة إلى الشاشة الرئيسية»</strong></span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="w-7 h-7 rounded-full bg-green-50 flex items-center justify-center shrink-0 text-green-600 font-bold text-xs">3</span>
+                  <span>اضغط <strong>«تثبيت»</strong></span>
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => setShowGuide(false)}
+              className="w-full rounded-2xl bg-[var(--accent)] text-white py-2.5 font-bold text-sm mt-4">
+              تم
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
