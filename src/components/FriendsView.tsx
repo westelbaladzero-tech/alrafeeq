@@ -99,6 +99,8 @@ export default function FriendsView() {
   const [transcribing, setTranscribing] = useState(false);
   const [imageTexts, setImageTexts] = useState<Record<string, string>>({});
   const [extractingImg, setExtractingImg] = useState<string | null>(null);
+  const [audioTexts, setAudioTexts] = useState<Record<string, string>>({});
+  const [transcribingAudio, setTranscribingAudio] = useState<string | null>(null);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -470,6 +472,25 @@ export default function FriendsView() {
       showToast("تعذّر استخلاص النص من الصورة");
     }
     setExtractingImg(null);
+  }
+
+  // ─── تفريغ صوت رسالة مستلمة ───
+  async function transcribeAudioMessage(msgId: string, audioUrl: string) {
+    setTranscribingAudio(msgId);
+    try {
+      const res = await fetch(audioUrl);
+      const blob = await res.blob();
+      const formData = new FormData();
+      formData.append("audio", blob, `audio-msg-${msgId}.webm`);
+      const apiRes = await fetch("/api/mic-test", { method: "POST", body: formData });
+      const data = await apiRes.json();
+      if (!apiRes.ok || !data.ok) throw new Error(data?.error || "فشل التفريغ");
+      const text = data.transcript || "لم يتم التعرف على صوت";
+      setAudioTexts((prev) => ({ ...prev, [msgId]: text }));
+    } catch {
+      showToast("تعذّر تفريغ الصوت");
+    }
+    setTranscribingAudio(null);
   }
 
   // تنظيف الميكرفون عند الخروج
@@ -1212,9 +1233,27 @@ export default function FriendsView() {
                   )}
                   {/* صوت */}
                   {m.type === "audio" && m.file_url && (
-                    <div className="mb-1">
-                      <audio controls src={m.file_url} className="w-full max-w-[220px]" />
-                    </div>
+                    <>
+                      <div className="mb-1">
+                        <audio controls src={m.file_url} className="w-full max-w-[220px]" />
+                      </div>
+                      {/* زر تفريغ الصوت */}
+                      {!audioTexts[m.id] && (
+                        <button onClick={() => transcribeAudioMessage(m.id, m.file_url)}
+                          disabled={transcribingAudio === m.id}
+                          className={"flex items-center gap-1 text-[10px] py-1 px-2 rounded-lg mb-1 " + (mine ? "bg-white/10 text-white" : "bg-gray-50 text-gray-500")}>
+                          {transcribingAudio === m.id ? <Loader2 size={12} className="animate-spin" /> : <ScanText size={12} />}
+                          تفريغ الصوت
+                        </button>
+                      )}
+                      {/* النص المفرّغ */}
+                      {audioTexts[m.id] && (
+                        <div className={"text-sm mt-1 pt-1 border-t " + (mine ? "border-white/20" : "border-gray-100")}>
+                          <span className={"text-[9px] " + (mine ? "text-white/50" : "text-gray-400")}>🎤 </span>
+                          {audioTexts[m.id]}
+                        </div>
+                      )}
+                    </>
                   )}
                   {/* نص */}
                   {m.type === "text" && m.content && (
@@ -1256,6 +1295,21 @@ export default function FriendsView() {
                         <button onClick={() => speakMessage(imageTexts[m.id])}
                           className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
                           title="اسمع النص المستخرج">
+                          <Volume2 size={12} />
+                        </button>
+                      </>
+                    )}
+                    {/* أزرار للنص المفرّغ من الصوت */}
+                    {audioTexts[m.id] && (
+                      <>
+                        <button onClick={() => onTranslateClick("aud-" + m.id, audioTexts[m.id])}
+                          className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                          title="ترجمة الصوت المفرّغ">
+                          🌐
+                        </button>
+                        <button onClick={() => speakMessage(audioTexts[m.id])}
+                          className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                          title="اسمع الصوت المفرّغ">
                           <Volume2 size={12} />
                         </button>
                       </>
