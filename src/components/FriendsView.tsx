@@ -944,29 +944,37 @@ export default function FriendsView() {
           <div ref={msgEndRef} />
         </div>
 
-        <div className="p-3 bg-white border-t border-[var(--soft)] flex items-center gap-2">
-          <button onClick={() => setChatShowDebt(true)}
-            className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0"
-            title="ليّ عنده">
-            <HandCoins size={18} className="text-[var(--accent)]" />
-          </button>
-          <button onClick={() => setChatShowSettle(true)}
-            className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center shrink-0"
-            title="تسوية">
-            <Banknote size={18} className="text-[var(--accent)]" />
-          </button>
-          <input
-            type="text"
-            value={msgInput}
-            onChange={(e) => setMsgInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="اكتب رسالة..."
-            className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm"
-          />
-          <button onClick={sendMessage} disabled={msgSending || !msgInput.trim()}
-            className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center disabled:opacity-40 shrink-0">
-            <Send size={18} />
-          </button>
+        <div className="p-3 bg-white border-t border-[var(--soft)] space-y-2">
+          {/* صف أزرار الأموال */}
+          <div className="flex items-center gap-2">
+            <button onClick={() => setChatShowDebt(true)}
+              className="flex items-center gap-1.5 bg-green-50 rounded-xl px-3 py-2 shrink-0"
+              title="ليّ عنده">
+              <HandCoins size={16} className="text-[var(--accent)]" />
+              <span className="text-xs font-bold text-[var(--accent)]">دين</span>
+            </button>
+            <button onClick={() => setChatShowSettle(true)}
+              className="flex items-center gap-1.5 bg-green-50 rounded-xl px-3 py-2 shrink-0"
+              title="تسوية">
+              <Banknote size={16} className="text-[var(--accent)]" />
+              <span className="text-xs font-bold text-[var(--accent)]">تسوية</span>
+            </button>
+          </div>
+          {/* صف الإدخال والإرسال */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={msgInput}
+              onChange={(e) => setMsgInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+              placeholder="اكتب رسالة..."
+              className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm"
+            />
+            <button onClick={sendMessage} disabled={msgSending || !msgInput.trim()}
+              className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center disabled:opacity-40 shrink-0">
+              <Send size={18} />
+            </button>
+          </div>
         </div>
 
         {/* مودال طلب دين داخل الشات */}
