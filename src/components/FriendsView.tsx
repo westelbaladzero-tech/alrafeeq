@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send } from "lucide-react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
 
@@ -93,6 +93,7 @@ export default function FriendsView() {
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -214,7 +215,7 @@ export default function FriendsView() {
     const sb = getSupabase() as any;
     if (!sb) return;
     const { data } = await sb.from("messages")
-      .select("id, sender_id, content, type, created_at, read_at")
+      .select("id, sender_id, content, type, created_at, read_at, file_url, file_name, file_size, mime_type")
       .eq("friendship_id", friendshipId)
       .order("created_at", { ascending: true })
       .limit(100);
@@ -292,6 +293,85 @@ export default function FriendsView() {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     }
     setMsgSending(false);
+  }
+
+  // رفع ملف للشات
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !chatFriend || !uid) return;
+    // حد الحجم 50MB
+    if (file.size > 50 * 1024 * 1024) {
+      showToast("الملف كبير — الحد الأقصى 50MB");
+      e.target.value = "";
+      return;
+    }
+    const isImage = file.type.startsWith("image/");
+    const isAudio = file.type.startsWith("audio/");
+    const msgType = isImage ? "image" : isAudio ? "audio" : "file";
+    // معرّف مؤقت
+    const tempId = "temp-" + Date.now();
+    const tempMsg = {
+      id: tempId,
+      sender_id: uid,
+      content: "",
+      type: msgType,
+      created_at: new Date().toISOString(),
+      read_at: null,
+      pending: true,
+      file_name: file.name,
+      file_size: file.size,
+      mime_type: file.type,
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+    setMsgSending(true);
+    const sb = getSupabase() as any;
+    if (!sb) { setMsgSending(false); e.target.value = ""; return; }
+    // ارفع الملف للتخزين
+    const ext = file.name.split(".").pop() || "bin";
+    const filePath = `${chatFriend.friendship_id}/${tempId}.${ext}`;
+    const { error: upErr } = await sb.storage.from("chat-files").upload(filePath, file);
+    if (upErr) {
+      showToast("تعذّر رفع الملف");
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setMsgSending(false);
+      e.target.value = "";
+      return;
+    }
+    // احصل على الرابط العام
+    const { data: urlData } = sb.storage.from("chat-files").getPublicUrl(filePath);
+    const fileUrl = urlData?.publicUrl;
+    // أرسل الرسالة
+    const { data: msgData, error: msgErr } = await sb.from("messages").insert({
+      friendship_id: chatFriend.friendship_id,
+      sender_id: uid,
+      content: "",
+      type: msgType,
+      file_url: fileUrl,
+      file_name: file.name,
+      file_size: file.size,
+      mime_type: file.type,
+    }).select();
+    if (!msgErr && msgData && msgData[0]) {
+      // استبدل المؤقتة بالحقيقية
+      setMessages((prev) => prev.map((m) => m.id === tempId ? msgData[0] : m));
+    } else {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    }
+    setMsgSending(false);
+    e.target.value = "";
+  }
+
+  // نطق الرسالة صوتياً
+  function speakMessage(text: string) {
+    if (!window.speechSynthesis) {
+      showToast("المتصفح لا يدعم النطق الصوتي");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ar-EG";
+    utter.rate = 0.9;
+    window.speechSynthesis.speak(utter);
   }
 
   // احفظ رسالة معلّقة في localStorage
@@ -932,10 +1012,47 @@ export default function FriendsView() {
             return (
               <div key={m.id} className={"flex " + (mine ? "justify-end" : "justify-start")}>
                 <div className={"max-w-[75%] rounded-2xl px-3 py-2 " + (mine ? "bg-[var(--accent)] text-white" : "bg-white text-gray-800 border border-[var(--soft)]")}>
-                  <div className="text-sm whitespace-pre-wrap break-words">{m.content}</div>
-                  <div className={"text-[9px] mt-0.5 " + (mine ? "text-white/60" : "text-gray-300")}>
-                    {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+                  {/* صورة */}
+                  {m.type === "image" && m.file_url && (
+                    <a href={m.file_url} target="_blank" rel="noopener noreferrer" className="block mb-1">
+                      <img src={m.file_url} alt={m.file_name || "صورة"} className="rounded-xl max-w-full max-h-60 object-cover" />
+                    </a>
+                  )}
+                  {/* ملف */}
+                  {m.type === "file" && m.file_url && (
+                    <a href={m.file_url} target="_blank" rel="noopener noreferrer" download={m.file_name}
+                      className={"flex items-center gap-2 rounded-xl p-2 mb-1 " + (mine ? "bg-white/10" : "bg-gray-50")}>
+                      <FileText size={20} className={mine ? "text-white" : "text-[var(--accent)]"} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold truncate">{m.file_name}</div>
+                        <div className={"text-[10px] " + (mine ? "text-white/60" : "text-gray-400")}>
+                          {m.file_size ? Math.round(m.file_size / 1024) + " KB" : ""}
+                        </div>
+                      </div>
+                      <Download size={16} className={mine ? "text-white" : "text-[var(--accent)]"} />
+                    </a>
+                  )}
+                  {/* صوت */}
+                  {m.type === "audio" && m.file_url && (
+                    <div className="mb-1">
+                      <audio controls src={m.file_url} className="w-full max-w-[220px]" />
+                    </div>
+                  )}
+                  {/* نص */}
+                  {m.type === "text" && m.content && (
+                    <div className="text-sm whitespace-pre-wrap break-words">{m.content}</div>
+                  )}
+                  <div className={"text-[9px] mt-0.5 flex items-center gap-1 " + (mine ? "text-white/60" : "text-gray-300")}>
+                    <span>{new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</span>
                     {mine && (m.pending ? " 🕐" : m.read_at ? " ✓✓" : " ✓")}
+                    {/* زر السماع للرسائل النصية */}
+                    {m.type === "text" && m.content && (
+                      <button onClick={() => speakMessage(m.content)}
+                        className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                        title="اسمع">
+                        <Volume2 size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -959,6 +1076,20 @@ export default function FriendsView() {
               <Banknote size={16} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent)]">تسوية</span>
             </button>
+            {/* زر رفع الملفات */}
+            <button onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2 shrink-0"
+              title="إرفاق ملف">
+              <Paperclip size={16} className="text-gray-500" />
+              <span className="text-xs font-bold text-gray-500">ملف</span>
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+              accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt,.zip"
+            />
           </div>
           {/* صف الإدخال والإرسال */}
           <div className="flex items-center gap-2">
