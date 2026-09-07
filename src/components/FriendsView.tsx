@@ -90,6 +90,11 @@ export default function FriendsView() {
   const [chatShowSettle, setChatShowSettle] = useState(false);
   const [settleDirection, setSettleDirection] = useState<"me" | "friend">("me");
   const [pendingMsgs, setPendingMsgs] = useState<any[]>([]);
+  const [speakLang, setSpeakLang] = useState("ar-EG");
+  const [showLangPicker, setShowLangPicker] = useState(false);
+  const [translateTarget, setTranslateTarget] = useState<string | null>(null);
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translating, setTranslating] = useState<string | null>(null);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -361,18 +366,57 @@ export default function FriendsView() {
     e.target.value = "";
   }
 
-  // نطق الرسالة صوتياً
-  function speakMessage(text: string) {
+  // نطق الرسالة صوتياً باللغة المختارة
+  function speakMessage(text: string, lang?: string) {
     if (!window.speechSynthesis) {
       showToast("المتصفح لا يدعم النطق الصوتي");
       return;
     }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "ar-EG";
+    utter.lang = lang || speakLang;
     utter.rate = 0.9;
     window.speechSynthesis.speak(utter);
   }
+
+  // ترجمة رسالة
+  async function translateMessage(msgId: string, text: string, targetLang: string) {
+    setTranslating(msgId);
+    try {
+      // اكتشف لغة المصدر (افترض العربية لو نص عربي)
+      const srcLang = /[\u0600-\u06FF]/.test(text) ? "ar" : "en";
+      const res = await fetch(
+        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${srcLang}|${targetLang}`
+      );
+      const data = await res.json();
+      if (data && data.responseData && data.responseData.translatedText) {
+        setTranslations((prev) => ({ ...prev, [msgId]: data.responseData.translatedText }));
+      } else {
+        showToast("تعذّرت الترجمة");
+      }
+    } catch {
+      showToast("خطأ في الترجمة — تأكد من الإنترنت");
+    }
+    setTranslating(null);
+  }
+
+  // اختيار لغة ثم ترجمة
+  function onTranslateClick(msgId: string, text: string) {
+    setTranslateTarget(msgId);
+    setShowLangPicker(true);
+  }
+
+  // قائمة اللغات
+  const LANGS = [
+    { code: "ar", label: "العربية", speak: "ar-EG" },
+    { code: "en", label: "English", speak: "en-US" },
+    { code: "fr", label: "Français", speak: "fr-FR" },
+    { code: "es", label: "Español", speak: "es-ES" },
+    { code: "de", label: "Deutsch", speak: "de-DE" },
+    { code: "tr", label: "Türkçe", speak: "tr-TR" },
+    { code: "ur", label: "اردو", speak: "ur-PK" },
+    { code: "fa", label: "فارسی", speak: "fa-IR" },
+  ];
 
   // احفظ رسالة معلّقة في localStorage
   function savePendingMsg(shipId: string, tempId: string, content: string) {
@@ -422,6 +466,9 @@ export default function FriendsView() {
   useEffect(() => {
     const onOnline = () => retryPendingMsgs();
     window.addEventListener("online", onOnline);
+    // استعد اللغة المحفوظة
+    const savedLang = localStorage.getItem("alrafeeq-lang");
+    if (savedLang) setSpeakLang(savedLang);
     return () => window.removeEventListener("online", onOnline);
   }, []);
 
@@ -1042,14 +1089,36 @@ export default function FriendsView() {
                   {m.type === "text" && m.content && (
                     <div className="text-sm whitespace-pre-wrap break-words">{m.content}</div>
                   )}
-                  <div className={"text-[9px] mt-0.5 flex items-center gap-1 " + (mine ? "text-white/60" : "text-gray-300")}>
+                  {/* الترجمة أسفل الرسالة */}
+                  {translations[m.id] && (
+                    <div className={"text-sm mt-1 pt-1 border-t " + (mine ? "border-white/20" : "border-gray-100")}>
+                      <span className={"text-[9px] " + (mine ? "text-white/50" : "text-gray-400")}>🌐 </span>
+                      {translations[m.id]}
+                    </div>
+                  )}
+                  <div className={"text-[9px] mt-0.5 flex items-center gap-2 " + (mine ? "text-white/60" : "text-gray-300")}>
                     <span>{new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</span>
                     {mine && (m.pending ? " 🕐" : m.read_at ? " ✓✓" : " ✓")}
-                    {/* زر السماع للرسائل النصية */}
+                    {/* أزرار لكل رسالة نصية */}
                     {m.type === "text" && m.content && (
-                      <button onClick={() => speakMessage(m.content)}
+                      <>
+                        <button onClick={() => onTranslateClick(m.id, m.content)}
+                          className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                          title="ترجمة">
+                          🌐
+                        </button>
+                        <button onClick={() => speakMessage(m.content)}
+                          className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                          title="اسمع">
+                          <Volume2 size={12} />
+                        </button>
+                      </>
+                    )}
+                    {/* زر سماع للترجمة */}
+                    {translations[m.id] && (
+                      <button onClick={() => speakMessage(translations[m.id])}
                         className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
-                        title="اسمع">
+                        title="اسمع الترجمة">
                         <Volume2 size={12} />
                       </button>
                     )}
@@ -1182,6 +1251,39 @@ export default function FriendsView() {
                 {submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}
               </button>
               <button onClick={() => setChatShowSettle(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
+
+        {/* نافذة اختيار اللغة */}
+        {showLangPicker && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowLangPicker(false)}>
+            <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-bold text-center mb-1">اختر اللغة</h3>
+              <p className="text-xs text-gray-400 text-center mb-4">
+                {translateTarget ? "لترجمة الرسالة" : "للسماع والترجمة"}
+              </p>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {LANGS.map((lng) => (
+                  <button key={lng.code}
+                    onClick={() => {
+                      setSpeakLang(lng.speak);
+                      localStorage.setItem("alrafeeq-lang", lng.speak);
+                      if (translateTarget) {
+                        const msg = messages.find((m) => m.id === translateTarget);
+                        if (msg) translateMessage(msg.id, msg.content, lng.code);
+                      }
+                      setShowLangPicker(false);
+                      setTranslateTarget(null);
+                    }}
+                    className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (speakLang === lng.speak ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
+                    <span className="text-sm font-bold">{lng.label}</span>
+                    {speakLang === lng.speak && <Check size={16} className="text-[var(--accent)] mr-auto" />}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => { setShowLangPicker(false); setTranslateTarget(null); }}
+                className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
             </div>
           </div>
         )}
