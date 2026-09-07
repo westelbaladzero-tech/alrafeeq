@@ -410,7 +410,28 @@ export default function FriendsView() {
         setTranscribing(true);
         try {
           const text = await transcribeAudio(blob);
-          if (text) setMsgInput(text);
+          if (!text) { setTranscribing(false); return; }
+          // اكتشف لغة النص المفرّغ
+          const isArabic = /[\u0600-\u06FF]/.test(text);
+          const chosenCode = speakLang.split("-")[0]; // ar, en, fr...
+          const textLang = isArabic ? "ar" : "en";
+          // لو اللغة المختارة مختلفة ← ترجم تلقائياً
+          if (textLang !== chosenCode) {
+            try {
+              const trRes = await fetch(
+                `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${textLang}|${chosenCode}`
+              );
+              const trData = await trRes.json();
+              if (trData?.responseData?.translatedText) {
+                setMsgInput(trData.responseData.translatedText);
+                showToast("تم تفريغ وترجمة الصوت");
+                setTranscribing(false);
+                return;
+              }
+            } catch {}
+          }
+          // لو نفس اللغة ← ضع النص مباشرة
+          setMsgInput(text);
         } catch {
           showToast("فشل تفريغ الصوت");
         } finally {
@@ -1305,6 +1326,14 @@ export default function FriendsView() {
               disabled={recording || transcribing}
               className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm disabled:opacity-50"
             />
+            {/* زر سماع للنص المكتوب/المفرّغ */}
+            {msgInput.trim() && !recording && !transcribing && (
+              <button onClick={() => speakMessage(msgInput)}
+                className="w-10 h-10 rounded-full bg-gray-50 text-gray-500 flex items-center justify-center shrink-0"
+                title="اسمع قبل الإرسال">
+                <Volume2 size={18} />
+              </button>
+            )}
             <button onClick={sendMessage} disabled={msgSending || !msgInput.trim() || recording || transcribing}
               className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center disabled:opacity-40 shrink-0">
               <Send size={18} />
