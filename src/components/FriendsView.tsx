@@ -351,9 +351,10 @@ export default function FriendsView() {
       e.target.value = "";
       return;
     }
-    // احصل على الرابط العام
-    const { data: urlData } = sb.storage.from("chat-files").getPublicUrl(filePath);
-    const fileUrl = urlData?.publicUrl;
+    // احصل على رابط موقّع (خاص — ليس عاماً)
+    const { data: urlData } = await sb.storage.from("chat-files")
+      .createSignedUrl(filePath, 3600);
+    const fileUrl = urlData?.signedUrl;
     // أرسل الرسالة
     const { data: msgData, error: msgErr } = await sb.from("messages").insert({
       friendship_id: chatFriend.friendship_id,
