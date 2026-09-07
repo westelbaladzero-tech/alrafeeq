@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
+import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey } from "@/lib/e2e-crypto";
 
 interface Friend {
   friendship_id: string;
@@ -101,6 +102,10 @@ export default function FriendsView() {
   const [extractingImg, setExtractingImg] = useState<string | null>(null);
   const [audioTexts, setAudioTexts] = useState<Record<string, string>>({});
   const [transcribingAudio, setTranscribingAudio] = useState<string | null>(null);
+  const [myPrivKey, setMyPrivKey] = useState<CryptoKey | null>(null);
+  const [myPubKey, setMyPubKey] = useState<string>("");
+  const [friendPubKeys, setFriendPubKeys] = useState<Record<string, string>>({});
+  const [e2eReady, setE2eReady] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -233,7 +238,31 @@ export default function FriendsView() {
       .eq("friendship_id", friendshipId)
       .order("created_at", { ascending: true })
       .limit(100);
-    setMessages(data || []);
+    // ─── فكّ تشفير الرسائل المشفّرة ───
+    let processedMsgs = data || [];
+    if (e2eReady && myPrivKey) {
+      processedMsgs = await Promise.all(processedMsgs.map(async (m: any) => {
+        if (m.content && typeof m.content === "string" && m.content.startsWith("ENC:") && m.sender_id !== uid) {
+          try {
+            const friendId = m.sender_id === uid ? chatFriendRef.current?.friend_id : m.sender_id;
+            const friendPub = friendId ? await getFriendPubKey(friendId) : null;
+            if (friendPub) {
+              const encB64 = m.content.slice(4); // أزل "ENC:"
+              m.content = await decryptMessage(encB64, myPrivKey, friendPub);
+            } else {
+              m.content = "[رسالة مشفّرة — لا يمكن فك تشفيرها]";
+            }
+          } catch {
+            m.content = "[فشل فك التشفير]";
+          }
+        } else if (m.content && typeof m.content === "string" && m.content.startsWith("ENC:") && m.sender_id === uid) {
+          // رسالتي المشفّرة ← استبدلها بالنص الأصلي غير المتاح
+          m.content = "[رسالة مرسلة مشفّرة]";
+        }
+        return m;
+      }));
+    }
+    setMessages(processedMsgs);
     // علّم رسائلك كمقروءة
     if (data && data.length > 0 && uid) {
       const unread = data.filter((m: any) => m.sender_id !== uid && !m.read_at);
@@ -252,6 +281,34 @@ export default function FriendsView() {
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: "friendship_id=eq." + friendshipId },
         (payload: any) => {
+          // ─── فكّ تشفير الرسالة الجديدة ───
+          const newMsg = { ...payload.new };
+          if (newMsg.content && typeof newMsg.content === "string" && newMsg.content.startsWith("ENC:") && newMsg.sender_id !== uid) {
+            (async () => {
+              try {
+                const friendPub = await getFriendPubKey(newMsg.sender_id);
+                if (friendPub && myPrivKey) {
+                  const encB64 = newMsg.content.slice(4);
+                  const decrypted = await decryptMessage(encB64, myPrivKey, friendPub);
+                  newMsg.content = decrypted;
+                } else {
+                  newMsg.content = "[رسالة مشفّرة]";
+                }
+              } catch {
+                newMsg.content = "[فشل فك التشفير]";
+              }
+              setMessages((prev) => {
+                if (prev.find((m) => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
+              if (newMsg.sender_id !== uid && !newMsg.read_at) {
+                sb.from("messages").update({ read_at: new Date().toISOString() }).eq("id", newMsg.id);
+              }
+              setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+            })();
+            return;
+          }
+          // رسالة غير مشفّرة ← اعرضها مباشرة
           setMessages((prev) => {
             if (prev.find((m) => m.id === payload.new.id)) return prev;
             return [...prev, payload.new];
@@ -269,14 +326,26 @@ export default function FriendsView() {
 
   async function sendMessage() {
     if (!msgInput.trim() || !chatFriend || !uid) return;
-    const content = msgInput.trim().slice(0, 2000).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const plainText = msgInput.trim().slice(0, 2000).replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const shipId = chatFriend.friendship_id;
+    // ─── شفّر الرسالة قبل الإرسال ───
+    let contentToSend = plainText;
+    let isEncrypted = false;
+    if (e2eReady && myPrivKey) {
+      try {
+        const friendPub = await getFriendPubKey(chatFriend.friend_id);
+        if (friendPub) {
+          contentToSend = "ENC:" + await encryptMessage(plainText, myPrivKey, friendPub);
+          isEncrypted = true;
+        }
+      } catch {}
+    }
     // أنشئ معرّف مؤقت
     const tempId = "temp-" + Date.now();
     const tempMsg = {
       id: tempId,
       sender_id: uid,
-      content,
+      content: plainText, // اعرض النص الأصلي محلياً
       type: "text",
       created_at: new Date().toISOString(),
       read_at: null,
@@ -289,19 +358,19 @@ export default function FriendsView() {
     const sb = getSupabase() as any;
     if (!sb) {
       // لا يوجد اتصال — احفظ في القائمة المحلية
-      savePendingMsg(shipId, tempId, content);
+      savePendingMsg(shipId, tempId, plainText);
       setMsgSending(false);
       return;
     }
     const { error } = await sb.from("messages").insert({
       friendship_id: shipId,
       sender_id: uid,
-      content,
+      content: contentToSend, // النص المشفّر
       type: "text",
     });
     if (error) {
       // فشل الإرسال — احفظ في القائمة المحلية
-      savePendingMsg(shipId, tempId, content);
+      savePendingMsg(shipId, tempId, plainText);
     } else {
       // نجح — احذف الرسالة المؤقتة (الرسالة الحقيقية ستأتي عبر realtime)
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
@@ -487,6 +556,69 @@ export default function FriendsView() {
     }
     setTranscribingAudio(null);
   }
+
+  // ─── تهيئة مفاتيح التشفير ───
+  // المفتاح الخاص يبقى في IndexedDB (محلي)
+  // المفتاح العام يُخزّن في profiles.pubkey (سحابي)
+  async function initE2EKeys(userId: string) {
+    try {
+      // 1. اقرأ المفتاح الخاص من IndexedDB
+      const priv = await getPrivateKey();
+      const sb = getSupabase() as any;
+      if (!sb) return;
+
+      // 2. اقرأ المفتاح العام من السحاب
+      const { data: profile } = await sb.from("profiles")
+        .select("pubkey").eq("id", userId).maybeSingle();
+
+      if (priv) {
+        // عنده مفتاح خاص محلياً
+        setMyPrivKey(priv);
+        if (profile?.pubkey) {
+          // والمفتاح العام موجود سحابياً ← استخدمه
+          setMyPubKey(profile.pubkey);
+        } else {
+          // المفتاح العام غير موجود سحابياً ← ولّد جديد وارفعه
+          const pub = await generateKeyPair();
+          setMyPubKey(pub);
+          await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
+        }
+      } else {
+        // لا يوجد مفتاح خاص محلياً ← ولّد زوج جديد
+        const pub = await generateKeyPair();
+        const newPriv = await getPrivateKey();
+        setMyPrivKey(newPriv);
+        setMyPubKey(pub);
+        // ارفع المفتاح العام للسحاب (يستبدل أي قديم)
+        await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
+      }
+      setE2eReady(true);
+    } catch {
+      setE2eReady(false);
+    }
+  }
+
+  // ─── احصل على المفتاح العام لصديق (مع تخزين مؤقت) ───
+  async function getFriendPubKey(friendId: string): Promise<string | null> {
+    // تحقق من التخزين المؤقت
+    if (friendPubKeys[friendId]) return friendPubKeys[friendId];
+    const sb = getSupabase() as any;
+    if (!sb) return null;
+    const { data: profile } = await sb.from("profiles")
+      .select("pubkey").eq("id", friendId).maybeSingle();
+    if (profile?.pubkey) {
+      setFriendPubKeys((prev) => ({ ...prev, [friendId]: profile.pubkey }));
+      return profile.pubkey;
+    }
+    return null;
+  }
+
+  // ─── تهيئة المفاتيح عند تحميل المكوّن ───
+  useEffect(() => {
+    getResolvedUserId().then((id) => {
+      if (id) initE2EKeys(id);
+    });
+  }, []);
 
   // تنظيف الميكرفون عند الخروج
   useEffect(() => {
