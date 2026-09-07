@@ -89,6 +89,7 @@ export default function FriendsView() {
   const [chatShowDebt, setChatShowDebt] = useState(false);
   const [chatShowSettle, setChatShowSettle] = useState(false);
   const [settleDirection, setSettleDirection] = useState<"me" | "friend">("me");
+  const [pendingMsgs, setPendingMsgs] = useState<any[]>([]);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -99,28 +100,38 @@ export default function FriendsView() {
   }
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const chatFriendRef = useRef<Friend | null>(null);
+  const selectedFriendRef = useRef<Friend | null>(null);
 
+  // حدّث المراجع عند تغيير الحالة
+  useEffect(() => { chatFriendRef.current = chatFriend; }, [chatFriend]);
+  useEffect(() => { selectedFriendRef.current = selectedFriend; }, [selectedFriend]);
+
+  // تحميل مرة واحدة عند البداية + استطلاع خفيف
   useEffect(() => {
     load();
     const interval = setInterval(pollPending, 15000);
-    // استمع لزر الرجوع — تنقّل داخلي بدل الخروج
+    return () => {
+      clearInterval(interval);
+      if (chatChannelRef.current) {
+        chatChannelRef.current.unsubscribe();
+      }
+    };
+  }, []);
+
+  // استمع لزر الرجوع — تنقّل داخلي
+  useEffect(() => {
     const backHandler = () => {
-      if (chatFriend) {
+      if (chatFriendRef.current) {
         closeChat();
-      } else if (selectedFriend) {
+      } else if (selectedFriendRef.current) {
         setSelectedFriend(null);
         localStorage.removeItem("alrafeeq-selected-ship");
       }
     };
     window.addEventListener("app-back", backHandler);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("app-back", backHandler);
-      if (chatChannelRef.current) {
-        chatChannelRef.current.unsubscribe();
-      }
-    };
-  }, [chatFriend, selectedFriend]);
+    return () => window.removeEventListener("app-back", backHandler);
+  }, []);
 
   async function load() {
     if (isInitialLoad) setLoading(true);
@@ -131,24 +142,25 @@ export default function FriendsView() {
     await loadPendingDebts(userId);
     await loadPendingSettlements(userId);
     setLoading(false);
-    setIsInitialLoad(false);
-    // استعد الصديق المحدد أو الشات المحفوظ
-    const savedChat = localStorage.getItem("alrafeeq-chat-ship");
-    const savedFriend = localStorage.getItem("alrafeeq-selected-ship");
-    if (savedChat) {
-      // ابحث عن الصديق في القائمة المحمّلة
-      setTimeout(() => {
-        const f = friendsRef.current.find((x) => x.friendship_id === savedChat);
-        if (f) openChat(f);
-      }, 100);
-    } else if (savedFriend) {
-      setTimeout(() => {
-        const f = friendsRef.current.find((x) => x.friendship_id === savedFriend);
-        if (f) {
-          setSelectedFriend(f);
-          loadFriendDetails(userId, f.friend_id);
-        }
-      }, 100);
+    // استعد الشات/الصديق المحفوظ مرة واحدة فقط عند التحميل الأول
+    if (isInitialLoad) {
+      const savedChat = localStorage.getItem("alrafeeq-chat-ship");
+      const savedFriend = localStorage.getItem("alrafeeq-selected-ship");
+      if (savedChat) {
+        setTimeout(() => {
+          const f = friendsRef.current.find((x) => x.friendship_id === savedChat);
+          if (f) openChat(f);
+        }, 100);
+      } else if (savedFriend) {
+        setTimeout(() => {
+          const f = friendsRef.current.find((x) => x.friendship_id === savedFriend);
+          if (f) {
+            setSelectedFriend(f);
+            loadFriendDetails(userId, f.friend_id);
+          }
+        }, 100);
+      }
+      setIsInitialLoad(false);
     }
   }
 
@@ -166,8 +178,23 @@ export default function FriendsView() {
     localStorage.setItem("alrafeeq-chat-ship", friend.friendship_id);
     localStorage.removeItem("alrafeeq-selected-ship");
     setMessages([]);
+    // استعد الرسائل المعلّقة من localStorage لهذا الشات
+    const pending = JSON.parse(localStorage.getItem("alrafeeq-pending-msgs") || "[]")
+      .filter((pm: any) => pm.shipId === friend.friendship_id)
+      .map((pm: any) => ({
+        id: pm.tempId,
+        sender_id: pm.uid,
+        content: pm.content,
+        type: "text",
+        created_at: pm.created_at,
+        read_at: null,
+        pending: true,
+      }));
+    if (pending.length > 0) setMessages(pending);
     await loadMessages(friend.friendship_id);
     subscribeToMessages(friend.friendship_id);
+    // حاول إعادة إرسال المعلّق
+    retryPendingMsgs();
   }
 
   function closeChat() {
@@ -227,18 +254,87 @@ export default function FriendsView() {
 
   async function sendMessage() {
     if (!msgInput.trim() || !chatFriend || !uid) return;
+    const content = msgInput.trim();
+    const shipId = chatFriend.friendship_id;
+    // أنشئ معرّف مؤقت
+    const tempId = "temp-" + Date.now();
+    const tempMsg = {
+      id: tempId,
+      sender_id: uid,
+      content,
+      type: "text",
+      created_at: new Date().toISOString(),
+      read_at: null,
+      pending: true,
+    };
+    // أضف للواجهة فوراً
+    setMessages((prev) => [...prev, tempMsg]);
+    setMsgInput("");
     setMsgSending(true);
     const sb = getSupabase() as any;
-    if (!sb) { setMsgSending(false); return; }
+    if (!sb) {
+      // لا يوجد اتصال — احفظ في القائمة المحلية
+      savePendingMsg(shipId, tempId, content);
+      setMsgSending(false);
+      return;
+    }
     const { error } = await sb.from("messages").insert({
-      friendship_id: chatFriend.friendship_id,
+      friendship_id: shipId,
       sender_id: uid,
-      content: msgInput.trim(),
+      content,
       type: "text",
     });
-    if (!error) setMsgInput("");
+    if (error) {
+      // فشل الإرسال — احفظ في القائمة المحلية
+      savePendingMsg(shipId, tempId, content);
+    } else {
+      // نجح — احذف الرسالة المؤقتة (الرسالة الحقيقية ستأتي عبر realtime)
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    }
     setMsgSending(false);
   }
+
+  // احفظ رسالة معلّقة في localStorage
+  function savePendingMsg(shipId: string, tempId: string, content: string) {
+    const key = "alrafeeq-pending-msgs";
+    const all = JSON.parse(localStorage.getItem(key) || "[]");
+    all.push({ shipId, tempId, content, uid, created_at: new Date().toISOString() });
+    localStorage.setItem(key, JSON.stringify(all));
+    setPendingMsgs(all);
+  }
+
+  // أعد إرسال الرسائل المعلّقة عند عودة الإنترنت
+  async function retryPendingMsgs() {
+    const key = "alrafeeq-pending-msgs";
+    const all = JSON.parse(localStorage.getItem(key) || "[]");
+    if (all.length === 0) return;
+    const sb = getSupabase() as any;
+    if (!sb) return;
+    const remaining: any[] = [];
+    for (const pm of all) {
+      const { error } = await sb.from("messages").insert({
+        friendship_id: pm.shipId,
+        sender_id: pm.uid,
+        content: pm.content,
+        type: "text",
+      });
+      if (!error) {
+        // نجح — احذف الرسالة المؤقتة من الواجهة
+        setMessages((prev) => prev.filter((m) => m.id !== pm.tempId));
+      } else {
+        remaining.push(pm);
+      }
+    }
+    localStorage.setItem(key, JSON.stringify(remaining));
+    setPendingMsgs(remaining);
+  }
+
+  // استمع لعودة الإنترنت
+  useEffect(() => {
+    const onOnline = () => retryPendingMsgs();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
 
   // إرسال رسالة نظام في الشات (للديون والتسويات)
   async function sendSystemMessage(friendshipId: string, content: string) {
@@ -830,7 +926,7 @@ export default function FriendsView() {
                   <div className="text-sm whitespace-pre-wrap break-words">{m.content}</div>
                   <div className={"text-[9px] mt-0.5 " + (mine ? "text-white/60" : "text-gray-300")}>
                     {new Date(m.created_at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
-                    {mine && (m.read_at ? " ✓✓" : " ✓")}
+                    {mine && (m.pending ? " 🕐" : m.read_at ? " ✓✓" : " ✓")}
                   </div>
                 </div>
               </div>
