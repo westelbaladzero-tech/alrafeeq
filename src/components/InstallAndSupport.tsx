@@ -15,9 +15,11 @@ export default function InstallAndSupport() {
       (navigator as any).standalone === true;
     setInstalled(isStandalone);
 
+    // beforeinstallprompt يعني المتصفح جاهز للتثبيت
     const handler = (e: any) => {
       e.preventDefault();
       setInstallEvent(e);
+      // أظهر البانر فقط عند توفر التثبيت الفعلي
       if (!isStandalone) setShowBanner(true);
     };
     window.addEventListener("beforeinstallprompt", handler);
@@ -29,33 +31,31 @@ export default function InstallAndSupport() {
     };
     window.addEventListener("appinstalled", installedHandler);
 
-    if (!isStandalone) {
-      const timer = setTimeout(() => setShowBanner(true), 3000);
-      return () => {
-        clearTimeout(timer);
-        window.removeEventListener("beforeinstallprompt", handler);
-        window.removeEventListener("appinstalled", installedHandler);
-      };
-    }
-
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
       window.removeEventListener("appinstalled", installedHandler);
     };
   }, []);
 
+  // زر البانر: يثبت مباشرة (البانر لا يظهر إلا عند توفر التثبيت)
   async function handleInstall() {
-    if (installEvent) {
-      installEvent.prompt();
-      const { outcome } = await installEvent.userChoice;
-      if (outcome === "accepted") {
-        setInstalled(true);
-        setShowBanner(false);
-      }
-      setInstallEvent(null);
-      return;
+    if (!installEvent) return;
+    installEvent.prompt();
+    const { outcome } = await installEvent.userChoice;
+    if (outcome === "accepted") {
+      setInstalled(true);
+      setShowBanner(false);
     }
-    setShowGuide(true);
+    setInstallEvent(null);
+  }
+
+  // زر شريط الأدوات: يثبت لو متاح، أو يعرض دليل يدوي
+  function handleInstallOrGuide() {
+    if (installEvent) {
+      handleInstall();
+    } else {
+      setShowGuide(true);
+    }
   }
 
   function openWhatsApp() {
@@ -90,7 +90,7 @@ export default function InstallAndSupport() {
 
       <div className="flex items-center justify-center gap-6 px-4 py-1 bg-white border-t border-[var(--soft)] shrink-0">
         {!installed && (
-          <button onClick={handleInstall}
+          <button onClick={handleInstallOrGuide}
             className="flex items-center gap-1 text-xs text-[var(--accent)] font-bold">
             <Download size={14} /> تثبيت
           </button>
