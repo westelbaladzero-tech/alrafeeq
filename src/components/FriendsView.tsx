@@ -269,7 +269,7 @@ export default function FriendsView() {
 
   async function sendMessage() {
     if (!msgInput.trim() || !chatFriend || !uid) return;
-    const content = msgInput.trim();
+    const content = msgInput.trim().slice(0, 2000).replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const shipId = chatFriend.friendship_id;
     // أنشئ معرّف مؤقت
     const tempId = "temp-" + Date.now();

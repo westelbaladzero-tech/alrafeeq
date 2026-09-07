@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { trackUsage } from "@/lib/usage";
+import { rateLimit, getClientId } from "@/lib/rate-limit";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -21,6 +22,11 @@ function extractText(payload: any): string {
 }
 
 export async function POST(req: Request) {
+  // ─── Rate limiting: 15 صورة/دقيقة ───
+  const rl = rateLimit("img:" + getClientId(req), 15, 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
+  }
   try {
     const formData = await req.formData();
     const image = formData.get("image");

@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerClient, getAdminClient } from "@/lib/supabase-server";
+import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { validatePin } from "@/lib/validation";
 import * as crypto from "crypto";
 
 export async function POST(req: NextRequest) {
+  // ─── Rate limiting: 5 محاولات/دقيقة ───
+  const clientId = getClientId(req as unknown as Request);
+  const rl = rateLimit("pin:" + clientId, 5, 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "محاولات كثيرة — انتظر دقيقة" },
+      { status: 429 }
+    );
+  }
+
   const { pin, accessToken, userId } = await req.json();
   if (!pin) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
+  }
+  // ─── تحقق من صيغة PIN ───
+  if (!validatePin(pin)) {
+    return NextResponse.json({ error: "رمز غير صحيح" }, { status: 400 });
   }
   if (!accessToken && !userId) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
