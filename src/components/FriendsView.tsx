@@ -311,22 +311,31 @@ export default function FriendsView() {
     const sb = getSupabase() as any;
     if (!sb) return;
     const remaining: any[] = [];
+    let anySent = false;
     for (const pm of all) {
-      const { error } = await sb.from("messages").insert({
+      const { data, error } = await sb.from("messages").insert({
         friendship_id: pm.shipId,
         sender_id: pm.uid,
         content: pm.content,
         type: "text",
-      });
-      if (!error) {
-        // نجح — احذف الرسالة المؤقتة من الواجهة
-        setMessages((prev) => prev.filter((m) => m.id !== pm.tempId));
+      }).select();
+      if (!error && data && data[0]) {
+        // نجح ← استبدل الرسالة المؤقتة بالحقيقية (تبقى ظاهرة)
+        const realMsg = data[0];
+        setMessages((prev) => prev.map((m) =>
+          m.id === pm.tempId ? realMsg : m
+        ));
+        anySent = true;
       } else {
         remaining.push(pm);
       }
     }
     localStorage.setItem(key, JSON.stringify(remaining));
     setPendingMsgs(remaining);
+    // لو أرسلنا رسائل ← أعد تحميل الرسائل للتأكد من التزامن
+    if (anySent && chatFriendRef.current) {
+      await loadMessages(chatFriendRef.current.friendship_id);
+    }
   }
 
   // استمع لعودة الإنترنت
