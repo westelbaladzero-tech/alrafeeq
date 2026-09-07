@@ -457,16 +457,10 @@ export default function FriendsView() {
       const blob = await res.blob();
       const formData = new FormData();
       formData.append("image", blob, `chat-img-${msgId}.jpg`);
-      const apiRes = await fetch("/api/receipt-test", { method: "POST", body: formData });
+      const apiRes = await fetch("/api/image-text", { method: "POST", body: formData });
       const data = await apiRes.json();
       if (!apiRes.ok || !data.ok) throw new Error(data?.error || "فشل التحليل");
-      // اجمع النص المستخرج
-      const parts: string[] = [];
-      if (data.merchant && data.merchant !== "غير محدد") parts.push(data.merchant);
-      if (data.total && data.total !== "غير محدد") parts.push(`المبلغ: ${data.total}`);
-      if (data.date && data.date !== "غير محدد") parts.push(`التاريخ: ${data.date}`);
-      if (data.items?.length > 0) parts.push(data.items.join("، "));
-      const extractedText = parts.length > 0 ? parts.join(" — ") : (data.text || "لم يتم العثور على نص");
+      const extractedText = data.text || "لم يتم العثور على نص";
       setImageTexts((prev) => ({ ...prev, [msgId]: extractedText }));
     } catch {
       showToast("تعذّر استخلاص النص من الصورة");
