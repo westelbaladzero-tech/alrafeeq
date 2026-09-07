@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Download, MessageCircle, X, Share } from "lucide-react";
+import { Download, MessageCircle, X, Share, Smartphone } from "lucide-react";
 
 const WHATSAPP_NUMBER = "201050909821";
 
@@ -137,6 +137,12 @@ export default function InstallAndSupport() {
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-gray-400">للتثبيت على Android:</p>
+                {/* زر تنزيل APK مباشر */}
+                <a href="/alrafeeq.apk" download
+                  className="flex items-center justify-center gap-2 w-full bg-[var(--accent)] text-white py-3 rounded-2xl font-bold text-sm mb-2">
+                  <Smartphone size={18} /> تنزيل تطبيق APK
+                </a>
+                <div className="text-center text-[10px] text-gray-400 mb-2">— أو ثبّت كتطبيق ويب —</div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="w-7 h-7 rounded-full bg-green-50 flex items-center justify-center shrink-0 text-green-600 font-bold text-xs">1</span>
                   <span>اضغط <strong>القائمة ⋮</strong> في Chrome</span>
