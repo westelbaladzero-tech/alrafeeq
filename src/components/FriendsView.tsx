@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
-import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey } from "@/lib/e2e-crypto";
+import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
 
 interface Friend {
   friendship_id: string;
@@ -106,6 +106,10 @@ export default function FriendsView() {
   const [myPubKey, setMyPubKey] = useState<string>("");
   const [friendPubKeys, setFriendPubKeys] = useState<Record<string, string>>({});
   const [e2eReady, setE2eReady] = useState(false);
+  const [showKeyRecovery, setShowKeyRecovery] = useState(false);
+  const [recoveryPin, setRecoveryPin] = useState("");
+  const [recoveryErr, setRecoveryErr] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -558,44 +562,124 @@ export default function FriendsView() {
   }
 
   // ─── تهيئة مفاتيح التشفير ───
-  // المفتاح الخاص يبقى في IndexedDB (محلي)
-  // المفتاح العام يُخزّن في profiles.pubkey (سحابي)
+  // المفتاح الخاص: محلي (IndexedDB) + نسخة مشفّرة بالـ PIN سحابياً
   async function initE2EKeys(userId: string) {
     try {
-      // 1. اقرأ المفتاح الخاص من IndexedDB
       const priv = await getPrivateKey();
       const sb = getSupabase() as any;
       if (!sb) return;
 
-      // 2. اقرأ المفتاح العام من السحاب
       const { data: profile } = await sb.from("profiles")
-        .select("pubkey").eq("id", userId).maybeSingle();
+        .select("pubkey, encrypted_privkey, email").eq("id", userId).maybeSingle();
 
       if (priv) {
-        // عنده مفتاح خاص محلياً
+        // ─── عنده مفتاح خاص محلياً ───
         setMyPrivKey(priv);
         if (profile?.pubkey) {
-          // والمفتاح العام موجود سحابياً ← استخدمه
           setMyPubKey(profile.pubkey);
         } else {
-          // المفتاح العام غير موجود سحابياً ← ولّد جديد وارفعه
+          // المفتاح العام غير موجود سحابياً ← ولّد جديد
           const pub = await generateKeyPair();
+          const newPriv = await getPrivateKey();
+          setMyPrivKey(newPriv);
           setMyPubKey(pub);
+          // ارفع المفتاح العام + نسخة مشفّرة من الخاص
+          // (لا نعرف PIN هنا، نرفع المفتاح العام فقط)
           await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
         }
+        setE2eReady(true);
+      } else if (profile?.encrypted_privkey) {
+        // ─── ضاع المفتاح المحلي لكن توجد نسخة سحابية ───
+        // اطلب PIN من المستخدم لاسترجاع المفتاح
+        setShowKeyRecovery(true);
       } else {
-        // لا يوجد مفتاح خاص محلياً ← ولّد زوج جديد
+        // ─── لا مفتاح محلي ولا سحابي ← ولّد جديد ───
         const pub = await generateKeyPair();
         const newPriv = await getPrivateKey();
         setMyPrivKey(newPriv);
         setMyPubKey(pub);
-        // ارفع المفتاح العام للسحاب (يستبدل أي قديم)
         await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
+        setE2eReady(true);
+        // النسخة المشفّرة بالـ PIN تُرفع لاحقاً عند أول عملية PIN
       }
-      setE2eReady(true);
     } catch {
       setE2eReady(false);
     }
+  }
+
+  // ─── استرجاع المفتاح الخاص من النسخة السحابية ───
+  async function recoverKeyFromCloud() {
+    setRecoveryErr("");
+    if (!recoveryPin || !uid) { setRecoveryErr("اكتب الرمز"); return; }
+    setRecoveryLoading(true);
+    try {
+      const sb = getSupabase() as any;
+      if (!sb) { setRecoveryLoading(false); return; }
+      const { data: profile } = await sb.from("profiles")
+        .select("encrypted_privkey, email, pubkey").eq("id", uid).maybeSingle();
+      if (!profile?.encrypted_privkey || !profile?.email) {
+        setRecoveryErr("لا توجد نسخة احتياطية");
+        setRecoveryLoading(false);
+        return;
+      }
+      // فكّ تشفير المفتاح الخاص بالـ PIN
+      const recovered = await decryptPrivateKeyFromBackup(
+        profile.encrypted_privkey, recoveryPin, profile.email
+      );
+      if (!recovered) {
+        setRecoveryErr("الرمز خاطئ");
+        setRecoveryLoading(false);
+        return;
+      }
+      // خزّن المفتاح الخاص محلياً
+      const privRaw = await crypto.subtle.exportKey("pkcs8", recovered);
+      // أعد تخزينه في IndexedDB
+      await storePrivKeyLocal(privRaw);
+      setMyPrivKey(recovered);
+      setMyPubKey(profile.pubkey || "");
+      setE2eReady(true);
+      setShowKeyRecovery(false);
+      setRecoveryPin("");
+      showToast("تم استرجاع مفاتيح التشفير");
+    } catch {
+      setRecoveryErr("خطأ في الاسترجاع");
+    }
+    setRecoveryLoading(false);
+  }
+
+  // ─── خزّن المفتاح الخاص في IndexedDB (مجلّد) ───
+  async function storePrivKeyLocal(key: ArrayBuffer) {
+    return new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open("alrafeeq-keys", 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("alrafeeq-priv-key")) {
+          db.createObjectStore("alrafeeq-priv-key");
+        }
+      };
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction("alrafeeq-priv-key", "readwrite");
+        tx.objectStore("alrafeeq-priv-key").put(key, "priv");
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  }
+
+  // ─── ارفع نسخة احتياطية مشفّرة بالـ PIN ───
+  // تُستدعى بعد كل عملية PIN ناجحة (تأكيد دين/تسوية)
+  async function uploadEncryptedBackup(pin: string) {
+    if (!myPrivKey || !uid) return;
+    try {
+      const sb = getSupabase() as any;
+      if (!sb) return;
+      const { data: profile } = await sb.from("profiles")
+        .select("email").eq("id", uid).maybeSingle();
+      if (!profile?.email) return;
+      const encPriv = await encryptPrivateKeyForBackup(myPrivKey, pin, profile.email);
+      await sb.from("profiles").update({ encrypted_privkey: encPriv }).eq("id", uid);
+    } catch {}
   }
 
   // ─── احصل على المفتاح العام لصديق (مع تخزين مؤقت) ───
@@ -1596,6 +1680,27 @@ export default function FriendsView() {
                 {submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}
               </button>
               <button onClick={() => setChatShowSettle(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
+
+        {/* نافذة استرجاع مفتاح التشفير */}
+        {showKeyRecovery && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowKeyRecovery(false)}>
+            <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-bold text-center mb-1">استرجاع التشفير</h3>
+              <p className="text-xs text-gray-400 text-center mb-4">
+                هذا الجهاز لا يملك المفتاح المحلي. أدخل رمزك لاسترجاعه من النسخة السحابية.
+              </p>
+              <input type="password" value={recoveryPin} onChange={(e) => setRecoveryPin(e.target.value)}
+                placeholder="رمز الحماية" maxLength={8}
+                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-center text-lg tracking-widest" />
+              {recoveryErr && <div className="text-red-500 text-sm mb-2 text-center">{recoveryErr}</div>}
+              <button onClick={recoverKeyFromCloud} disabled={recoveryLoading}
+                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
+                {recoveryLoading ? "جاري الاسترجاع..." : "استرجاع المفتاح"}
+              </button>
+              <button onClick={() => setShowKeyRecovery(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
             </div>
           </div>
         )}
