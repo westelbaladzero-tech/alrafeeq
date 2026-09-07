@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("pin_hash")
+    .select("pin_hash, failed_attempts, locked_until")
     .eq("id", userUuid)
     .maybeSingle();
 
@@ -74,11 +74,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "الملف غير موجود" }, { status: 404 });
   }
 
+  // ─── تحقق من قفل الحساب ───
+  if (profile.locked_until && new Date(profile.locked_until) > new Date()) {
+    const mins = Math.ceil((new Date(profile.locked_until).getTime() - Date.now()) / 60000);
+    return NextResponse.json({ error: `الحساب مقفل — حاول بعد ${mins} دقيقة` }, { status: 423 });
+  }
+
   const pinHash = crypto.scryptSync(pin, userSalt, 64).toString("hex");
 
   if (pinHash !== profile.pin_hash) {
-    return NextResponse.json({ error: "الرمز خاطئ" }, { status: 401 });
+    // ─── زيادة عدّاد المحاولات الفاشلة ───
+    const attempts = (profile.failed_attempts || 0) + 1;
+    const MAX_ATTEMPTS = 5;
+    const updates: any = { failed_attempts: attempts };
+    if (attempts >= MAX_ATTEMPTS) {
+      updates.locked_until = new Date(Date.now() + 15 * 60000).toISOString();
+      updates.failed_attempts = 0;
+      await admin.from("profiles").update(updates).eq("id", userUuid);
+      return NextResponse.json({ error: "محاولات كثيرة — قُفل الحساب 15 دقيقة" }, { status: 423 });
+    }
+    await admin.from("profiles").update(updates).eq("id", userUuid);
+    return NextResponse.json({ error: `رمز خاطئ — متبقي ${MAX_ATTEMPTS - attempts} محاولات` }, { status: 401 });
   }
+
+  // ─── نجح ← أصفّر العدّاد ───
+  await admin.from("profiles").update({ failed_attempts: 0, locked_until: null }).eq("id", userUuid);
 
   return NextResponse.json({ ok: true });
 }
