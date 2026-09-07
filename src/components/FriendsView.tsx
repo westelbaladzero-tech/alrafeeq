@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2 } from "lucide-react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
 
@@ -95,10 +95,17 @@ export default function FriendsView() {
   const [translateTarget, setTranslateTarget] = useState<string | null>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translating, setTranslating] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [imageTexts, setImageTexts] = useState<Record<string, string>>({});
+  const [extractingImg, setExtractingImg] = useState<string | null>(null);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -365,6 +372,91 @@ export default function FriendsView() {
     setMsgSending(false);
     e.target.value = "";
   }
+
+  // ─── تفريغ الصوت من الميكرفون ───
+  async function transcribeAudio(blob: Blob): Promise<string> {
+    const formData = new FormData();
+    formData.append("audio", blob, `friends-mic-${Date.now()}.webm`);
+    const res = await fetch("/api/mic-test", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data?.error || "فشل تفريغ الصوت");
+    return data.transcript || "";
+  }
+
+  async function toggleMic() {
+    if (transcribing) return;
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    try {
+      setMsgInput("");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus" : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        setRecording(false);
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 500) return;
+        setTranscribing(true);
+        try {
+          const text = await transcribeAudio(blob);
+          if (text) setMsgInput(text);
+        } catch {
+          showToast("فشل تفريغ الصوت");
+        } finally {
+          setTranscribing(false);
+        }
+      };
+      recorder.start();
+      setRecording(true);
+    } catch {
+      setRecording(false);
+      showToast("تعذّر الوصول للميكرفون");
+    }
+  }
+
+  // ─── استخلاص النص من الصور ───
+  async function extractImageText(msgId: string, imageUrl: string) {
+    setExtractingImg(msgId);
+    try {
+      // حمّل الصورة كـ Blob
+      const res = await fetch(imageUrl);
+      const blob = await res.blob();
+      const formData = new FormData();
+      formData.append("image", blob, `chat-img-${msgId}.jpg`);
+      const apiRes = await fetch("/api/receipt-test", { method: "POST", body: formData });
+      const data = await apiRes.json();
+      if (!apiRes.ok || !data.ok) throw new Error(data?.error || "فشل التحليل");
+      // اجمع النص المستخرج
+      const parts: string[] = [];
+      if (data.merchant && data.merchant !== "غير محدد") parts.push(data.merchant);
+      if (data.total && data.total !== "غير محدد") parts.push(`المبلغ: ${data.total}`);
+      if (data.date && data.date !== "غير محدد") parts.push(`التاريخ: ${data.date}`);
+      if (data.items?.length > 0) parts.push(data.items.join("، "));
+      const extractedText = parts.length > 0 ? parts.join(" — ") : (data.text || "لم يتم العثور على نص");
+      setImageTexts((prev) => ({ ...prev, [msgId]: extractedText }));
+    } catch {
+      showToast("تعذّر استخلاص النص من الصورة");
+    }
+    setExtractingImg(null);
+  }
+
+  // تنظيف الميكرفون عند الخروج
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   // نطق الرسالة صوتياً باللغة المختارة
   function speakMessage(text: string, lang?: string) {
@@ -1061,9 +1153,27 @@ export default function FriendsView() {
                 <div className={"max-w-[75%] rounded-2xl px-3 py-2 " + (mine ? "bg-[var(--accent)] text-white" : "bg-white text-gray-800 border border-[var(--soft)]")}>
                   {/* صورة */}
                   {m.type === "image" && m.file_url && (
-                    <a href={m.file_url} target="_blank" rel="noopener noreferrer" className="block mb-1">
-                      <img src={m.file_url} alt={m.file_name || "صورة"} className="rounded-xl max-w-full max-h-60 object-cover" />
-                    </a>
+                    <>
+                      <a href={m.file_url} target="_blank" rel="noopener noreferrer" className="block mb-1">
+                        <img src={m.file_url} alt={m.file_name || "صورة"} className="rounded-xl max-w-full max-h-60 object-cover" />
+                      </a>
+                      {/* زر استخلاص النص */}
+                      {!imageTexts[m.id] && (
+                        <button onClick={() => extractImageText(m.id, m.file_url)}
+                          disabled={extractingImg === m.id}
+                          className={"flex items-center gap-1 text-[10px] py-1 px-2 rounded-lg mb-1 " + (mine ? "bg-white/10 text-white" : "bg-gray-50 text-gray-500")}>
+                          {extractingImg === m.id ? <Loader2 size={12} className="animate-spin" /> : <ScanText size={12} />}
+                          استخلاص النص
+                        </button>
+                      )}
+                      {/* النص المستخرج */}
+                      {imageTexts[m.id] && (
+                        <div className={"text-sm mt-1 pt-1 border-t " + (mine ? "border-white/20" : "border-gray-100")}>
+                          <span className={"text-[9px] " + (mine ? "text-white/50" : "text-gray-400")}>📝 </span>
+                          {imageTexts[m.id]}
+                        </div>
+                      )}
+                    </>
                   )}
                   {/* ملف */}
                   {m.type === "file" && m.file_url && (
@@ -1110,6 +1220,21 @@ export default function FriendsView() {
                         <button onClick={() => speakMessage(m.content)}
                           className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
                           title="اسمع">
+                          <Volume2 size={12} />
+                        </button>
+                      </>
+                    )}
+                    {/* أزرار للنص المستخرج من الصور */}
+                    {imageTexts[m.id] && (
+                      <>
+                        <button onClick={() => onTranslateClick("img-" + m.id, imageTexts[m.id])}
+                          className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                          title="ترجمة النص المستخرج">
+                          🌐
+                        </button>
+                        <button onClick={() => speakMessage(imageTexts[m.id])}
+                          className={"opacity-60 hover:opacity-100 " + (mine ? "text-white" : "text-gray-400")}
+                          title="اسمع النص المستخرج">
                           <Volume2 size={12} />
                         </button>
                       </>
@@ -1162,15 +1287,25 @@ export default function FriendsView() {
           </div>
           {/* صف الإدخال والإرسال */}
           <div className="flex items-center gap-2">
+            {/* زر الميكرفون */}
+            <button onClick={toggleMic} disabled={transcribing || msgSending}
+              className={"w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition disabled:opacity-50 " +
+                (recording ? "bg-red-500 text-white animate-pulse" :
+                 transcribing ? "bg-violet-500 text-white" : "bg-gray-50 text-[var(--accent)]")}
+              title={recording ? "إيقاف التسجيل" : "تسجيل صوتي"}>
+              {transcribing ? <Loader2 size={18} className="animate-spin" /> :
+               recording ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
             <input
               type="text"
               value={msgInput}
               onChange={(e) => setMsgInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="اكتب رسالة..."
-              className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm"
+              placeholder={recording ? "تسجيل... اضغط للإيقاف" : transcribing ? "تفريغ الصوت..." : "اكتب رسالة..."}
+              disabled={recording || transcribing}
+              className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-100 text-sm disabled:opacity-50"
             />
-            <button onClick={sendMessage} disabled={msgSending || !msgInput.trim()}
+            <button onClick={sendMessage} disabled={msgSending || !msgInput.trim() || recording || transcribing}
               className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center disabled:opacity-40 shrink-0">
               <Send size={18} />
             </button>
