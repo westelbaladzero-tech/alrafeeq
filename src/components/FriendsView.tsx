@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
+import PaymentMethodsModal from "./PaymentMethodsModal";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
 
@@ -69,6 +70,7 @@ export default function FriendsView() {
   const [pinVerifying, setPinVerifying] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ type: "debt" | "settlement"; id: string; accept: boolean } | null>(null);
   const [showRelation, setShowRelation] = useState(false);
+  const [showPaymentMethods, setShowPaymentMethods] = useState(false);
   const [relationType, setRelationType] = useState("");
   const [relationForShip, setRelationForShip] = useState<string | null>(null);
   const [isInstallment, setIsInstallment] = useState(false);
@@ -2483,10 +2485,16 @@ export default function FriendsView() {
               </span>
             )}
           </div>
-          <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 bg-[var(--accent)] text-white px-3 py-2 rounded-xl text-sm font-bold">
-            <UserPlus size={16} /> أضف صديق
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowPaymentMethods(true)}
+              className="flex items-center gap-1.5 bg-violet-50 text-violet-600 px-3 py-2 rounded-xl text-sm font-bold">
+              <CreditCard size={16} /> وسائل الدفع
+            </button>
+            <button onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 bg-[var(--accent)] text-white px-3 py-2 rounded-xl text-sm font-bold">
+              <UserPlus size={16} /> أضف صديق
+            </button>
+          </div>
         </div>
 
         {friends.filter((f) => f.status === "pending" && f.initiator !== uid).length > 0 && (
@@ -2586,6 +2594,9 @@ export default function FriendsView() {
         )}
       </div>
 
+      {showPaymentMethods && (
+        <PaymentMethodsModal onClose={() => setShowPaymentMethods(false)} />
+      )}
       {showAdd && (
         <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setShowAdd(false)}>
           <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
