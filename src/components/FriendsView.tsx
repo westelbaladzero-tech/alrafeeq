@@ -711,15 +711,42 @@ export default function FriendsView() {
     };
   }, []);
 
-  // نطق الرسالة صوتياً باللغة المختارة
-  function speakMessage(text: string, lang?: string) {
+  // نطق الرسالة صوتياً (Google TTS أولاً، ثم المتصفح احتياطياً)
+  async function speakMessage(text: string, lang?: string) {
+    const targetLang = lang || speakLang;
+    // أولاً: جرّب Google Cloud TTS (أصوات طبيعية مميزة)
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          lang: targetLang.startsWith("ar") ? "ar-XA" : "en-US",
+          voice: "female",
+          rate: 1.0,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.audio) {
+        const audio = new Audio("data:audio/mp3;base64," + data.audio);
+        audio.play().catch(() => speakWithBrowser(text, targetLang));
+        return;
+      }
+    } catch {
+      // تجاهل ← استخدم المتصفح
+    }
+    speakWithBrowser(text, targetLang);
+  }
+
+  // النطق بمتصفح الويب (Web Speech API)
+  function speakWithBrowser(text: string, lang: string) {
     if (!window.speechSynthesis) {
       showToast("المتصفح لا يدعم النطق الصوتي");
       return;
     }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = lang || speakLang;
+    utter.lang = lang;
     utter.rate = 0.9;
     window.speechSynthesis.speak(utter);
   }
