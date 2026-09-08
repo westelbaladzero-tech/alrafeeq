@@ -1,12 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard, CalendarClock, RefreshCw } from "lucide-react";
+import { Key as KeyIcon, UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard, CalendarClock, RefreshCw } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import PaymentMethodsModal from "./PaymentMethodsModal";
 import QRCode, { downloadQR } from "./QRCode";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
-import { unlockPrivateKey, hasEncryptedKey } from "@/lib/e2e-key-manager";
+import { unlockPrivateKey, hasEncryptedKey, getActivePrivateKey } from "@/lib/e2e-key-manager";
 
 interface Friend {
   friendship_id: string;
@@ -139,6 +139,11 @@ export default function FriendsView() {
   const [recoveryPin, setRecoveryPin] = useState("");
   const [recoveryErr, setRecoveryErr] = useState("");
   const [recoveryLoading, setRecoveryLoading] = useState(false);
+  // ─── PIN لفتح/إنشاء المفتاح الخاص (لا يُخزّن في أي storage) ───
+  const [showPinUnlock, setShowPinUnlock] = useState(false);
+  const [pinUnlockInput, setPinUnlockInput] = useState("");
+  const [pinUnlockErr, setPinUnlockErr] = useState("");
+  const [pinUnlockLoading, setPinUnlockLoading] = useState(false);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -594,51 +599,84 @@ export default function FriendsView() {
 
   // ─── تهيئة مفاتيح التشفير ───
   // المفتاح الخاص: محلي (IndexedDB) + نسخة مشفّرة بالـ PIN سحابياً
+  // ─── فتح المفتاح الخاص بـ PIN (مباشرة في الذاكرة — لا storage) ───
+  async function handlePinUnlock() {
+    setPinUnlockErr("");
+    if (pinUnlockInput.length < 4) {
+      setPinUnlockErr("الرمز يجب أن يكون 4 خانات على الأقل");
+      return;
+    }
+    setPinUnlockLoading(true);
+    try {
+      const userId = getUserIdSync();
+      if (!userId) return;
+      const sb = getSupabase() as any;
+      if (!sb) return;
+
+      const hasLocalKey = await hasEncryptedKey();
+      if (hasLocalKey) {
+        // ─── فتح المفتاح الموجود ───
+        const ok = await unlockPrivateKey(pinUnlockInput);
+        if (!ok) {
+          setPinUnlockErr("الرمز غير صحيح");
+          setPinUnlockLoading(false);
+          return;
+        }
+        const priv = getActivePrivateKey();
+        if (priv) {
+          setMyPrivKey(priv);
+          const { data: profile } = await sb.from("profiles")
+            .select("pubkey").eq("id", userId).maybeSingle();
+          if (profile?.pubkey) setMyPubKey(profile.pubkey);
+          setE2eReady(true);
+        }
+      } else {
+        // ─── إنشاء مفتاح جديد مشفّر بالـ PIN ───
+        const pub = await generateKeyPair(pinUnlockInput);
+        const priv = getActivePrivateKey();
+        // لاحقاً: ارفع نسخة سحابية مشفّرة عند أول verify-pin ناجح
+        if (priv) {
+          setMyPrivKey(priv);
+          setMyPubKey(pub);
+          await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
+          setE2eReady(true);
+        }
+      }
+      // امحُ PIN من المتغيّر المحلي فوراً
+      setPinUnlockInput("");
+      setShowPinUnlock(false);
+    } catch {
+      setPinUnlockErr("تعذّر فتح المفتاح");
+    }
+    setPinUnlockLoading(false);
+  }
+
   async function initE2EKeys(userId: string) {
     try {
-      // ─── حاول فتح المفتاح الخاص بالـ PIN ───
-      const pin = sessionStorage.getItem("alrafeeq-pin");
-      if (pin) {
-        await unlockPrivateKey(pin);
-        sessionStorage.removeItem("alrafeeq-pin"); // امحُه فوراً بعد الاستخدام
-      }
-      const priv = await getPrivateKey(); // من الذاكرة الآن
       const sb = getSupabase() as any;
       if (!sb) return;
 
       const { data: profile } = await sb.from("profiles")
         .select("pubkey, encrypted_privkey, email").eq("id", userId).maybeSingle();
 
+      // ─── تحقق هل يوجد مفتاح مشفّر محلياً ───
+      const hasLocalKey = await hasEncryptedKey();
+      const priv = getActivePrivateKey(); // من الذاكرة فقط
+
       if (priv) {
         // ─── المفتاح مفتوح في الذاكرة ───
         setMyPrivKey(priv);
-        if (profile?.pubkey) {
-          setMyPubKey(profile.pubkey);
-        } else {
-          // المفتاح العام غير موجود سحابياً ← ولّد جديد
-          // ولّد مفتاح جديد مشفّر بالـ PIN
-          const regPin = sessionStorage.getItem("alrafeeq-pin") || "0000";
-          const pub = await generateKeyPair(regPin);
-          const newPriv = await getPrivateKey();
-          setMyPrivKey(newPriv);
-          setMyPubKey(pub);
-          await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
-        }
+        if (profile?.pubkey) setMyPubKey(profile.pubkey);
         setE2eReady(true);
+      } else if (hasLocalKey) {
+        // ─── يوجد مفتاح مشفّر ← اطلب PIN لفتحه ───
+        setShowPinUnlock(true); // يظهر modal لإدخال PIN
       } else if (profile?.encrypted_privkey) {
-        // ─── ضاع المفتاح المحلي لكن توجد نسخة سحابية ───
-        // اطلب PIN من المستخدم لاسترجاع المفتاح
+        // ─── ضاع المحلي لكن توجد نسخة سحابية ───
         setShowKeyRecovery(true);
       } else {
-        // ─── لا مفتاح محلي ولا سحابي ← ولّد جديد ───
-        // ولّد مفتاح جديد مشفّر بالـ PIN
-        const regPin = sessionStorage.getItem("alrafeeq-pin") || "0000";
-        const pub = await generateKeyPair(regPin);
-        const newPriv = await getPrivateKey();
-        setMyPrivKey(newPriv);
-        setMyPubKey(pub);
-        await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
-        setE2eReady(true);
+        // ─── لا مفتاح محلي ولا سحابي ← اطلب PIN للإنشاء ───
+        setShowPinUnlock(true); // نفس الـ modal يولّد جديد
       }
     } catch {
       setE2eReady(false);
@@ -2365,6 +2403,47 @@ export default function FriendsView() {
         )}
 
         {/* نافذة استرجاع مفتاح التشفير */}
+        {showPinUnlock && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
+              <div className="flex items-center gap-2 mb-4">
+                <KeyIcon size={20} className="text-[var(--accent)]" />
+                <h3 className="font-bold text-lg">رمز الحماية</h3>
+              </div>
+              <p className="text-sm text-[var(--muted)] mb-4">
+                أدخل رمز الحماية لفك تشفير المحادثات. الرمز لا يُخزّن ويُستخدم مرة واحدة فقط.
+              </p>
+              <input
+                type="password"
+                value={pinUnlockInput}
+                onChange={e => setPinUnlockInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handlePinUnlock()}
+                placeholder="رمز الحماية (4 خانات)"
+                maxLength={8}
+                autoFocus
+                className="w-full border rounded-xl p-3 text-center text-lg tracking-widest mb-3"
+                disabled={pinUnlockLoading}
+              />
+              {pinUnlockErr && <p className="text-red-500 text-sm mb-3">{pinUnlockErr}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setPinUnlockInput(""); setShowPinUnlock(false); }}
+                  className="flex-1 py-3 rounded-xl bg-gray-100 font-bold"
+                  disabled={pinUnlockLoading}
+                >
+                  لاحقاً
+                </button>
+                <button
+                  onClick={handlePinUnlock}
+                  className="flex-1 py-3 rounded-xl bg-[var(--accent)] text-white font-bold"
+                  disabled={pinUnlockLoading}
+                >
+                  {pinUnlockLoading ? "جاري..." : "فتح"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {showKeyRecovery && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowKeyRecovery(false)}>
             <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={(e) => e.stopPropagation()}>

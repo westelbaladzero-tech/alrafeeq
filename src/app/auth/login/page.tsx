@@ -24,8 +24,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (data.error) { setErr(data.error); return; }
-    // خزّن PIN مؤقتاً لفك تشفير المفتاح الخاص بعد التحويل
-    if (pin) sessionStorage.setItem("alrafeeq-pin", pin);
+    // لا نخزّن PIN في أي storage — سيُطلب داخل التطبيق عند فتح المفتاح
     if (data.redirect) window.location.href = data.redirect;
   }
 
