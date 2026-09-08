@@ -1308,7 +1308,15 @@ export default function FriendsView() {
     if (!relationType || !relationForShip) return;
     const sb = getSupabase() as any;
     if (!sb) return;
-    const updateData: any = { relationship_type: relationType };
+    // حدّد دور الطرفين تلقائياً
+    const myRole = relationType;
+    const theirRole = getPairedRole(relationType);
+    const updateData: any = { 
+      relationship_type: relationType,
+      // role_a = دور المُنشئ (initiator)، role_b = دور الطرف الآخر
+      role_a: myRole,
+      role_b: theirRole,
+    };
     if (relationType === "association") {
       const total = Number(gam3eyaTotal);
       const myTurn = Number(gam3eyaMyTurn);
@@ -1338,13 +1346,29 @@ export default function FriendsView() {
   function getRelationLabel(type: string): string {
     const labels: Record<string, string> = {
       friend: "صديق",
-      employer: "صاحب عمل",
-      colleague: "أعمل مع",
+      employer: "مدير",
+      colleague: "يعمل مع",
       partner: "شريك",
       client: "عميل",
       association: "جمعية",
+      member: "عضو جمعية",
     };
     return labels[type] || "صديق";
+  }
+
+  // منطق الإقتران التلقائي للعلاقات
+  // عند اختيار دور ← يُحدّد دور الطرف الآخر تلقائياً
+  function getPairedRole(myRole: string): string {
+    const pairs: Record<string, string> = {
+      employer: "colleague",      // مدير ← يعمل مع
+      colleague: "employer",      // يعمل مع ← مدير
+      partner: "partner",         // شريك ← شريك
+      association: "member",      // جمعية (أنا مدير) ← عضو
+      member: "association",      // عضو ← جمعية (هو مدير)
+      friend: "friend",          // صديق ← صديق
+      client: "client",          // عميل ← عميل (متماثل)
+    };
+    return pairs[myRole] || "friend";
   }
 
   async function respondDebt(debtId: string, accept: boolean) {
