@@ -97,8 +97,6 @@ export default function FriendsView() {
   const [messages, setMessages] = useState<any[]>([]);
   const [msgInput, setMsgInput] = useState("");
   const [msgSending, setMsgSending] = useState(false);
-  const [chatShowDebt, setChatShowDebt] = useState(false);
-  const [chatShowSettle, setChatShowSettle] = useState(false);
   const [chatShowP2P, setChatShowP2P] = useState(false);
   const [chatShowUnified, setChatShowUnified] = useState(false);
   const [unifiedCat, setUnifiedCat] = useState<"debt" | "installment" | "gam3eya">("debt");
@@ -817,7 +815,33 @@ export default function FriendsView() {
   }
 
   // جلب الجمعية المشتركة
-  async function fetchP2PGam3eya() {
+  async function loadUnifiedItems(cat: "installment" | "gam3eya") {
+    if (!chatFriend || !uid) return;
+    if (cat === "installment") {
+      const sb = getSupabase();
+      if (!sb) return;
+      const { data } = await sb.from("debt_requests")
+        .select("id, amount, description, is_installment, total_installments, installment_amount, paid_installments, status")
+        .eq("is_installment", true)
+        .eq("status", "confirmed")
+        .or("and(creditor.eq." + uid + ",debtor.eq." + chatFriend.friend_id + "),and(creditor.eq." + chatFriend.friend_id + ",debtor.eq." + uid + ")");
+      const unpaid = ((data || []) as any[]).filter((d: any) => (d.paid_installments || 0) < (d.total_installments || 0));
+      setP2pItems(unpaid);
+    } else {
+      if (chatFriend.gam3eya_total && chatFriend.gam3eya_amount) {
+        setP2pItems([{
+          id: "gam3eya",
+          amount: chatFriend.gam3eya_amount,
+          total: chatFriend.gam3eya_total,
+          completed: chatFriend.gam3eya_completed || 0,
+        }]);
+      } else {
+        setP2pItems([]);
+      }
+    }
+  }
+
+    async function fetchP2PGam3eya() {
     if (!chatFriend) return;
     setP2pLoading(true);
     if (chatFriend.gam3eya_total && chatFriend.gam3eya_amount) {
@@ -1109,7 +1133,7 @@ export default function FriendsView() {
     await sendSystemMessage(chatFriend.friendship_id,
       (isInstallment ? "طلب دين بالأقساط: " : "طلب دين: ") + amt + " جنيه" + (debtDesc ? " — " + debtDesc : ""));
     setDebtAmount(""); setDebtDesc(""); setIsInstallment(false); setTotalInstallments(""); setInstallmentStart("");
-    setChatShowDebt(false);
+    setChatShowUnified(false);
     await load();
     showToast("تم إرسال طلب الدين");
     setSubmitting(false);
@@ -1143,7 +1167,7 @@ export default function FriendsView() {
     await sendSystemMessage(chatFriend.friendship_id,
       (settleDirection === "me" ? "لي عنده: " : "أخذت منه: ") + amt + " جنيه" + (settleDesc ? " — " + settleDesc : ""));
     setSettleAmount(""); setSettleDesc(""); setSettleDirection("me");
-    setChatShowSettle(false);
+    setChatShowUnified(false);
     await load();
     showToast("تم إرسال طلب التسوية");
     setSubmitting(false);
@@ -2038,11 +2062,11 @@ export default function FriendsView() {
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedCat === "debt" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
                   دين
                 </button>
-                <button onClick={() => setUnifiedCat("installment")}
+                <button onClick={() => { setUnifiedCat("installment"); loadUnifiedItems("installment"); }}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedCat === "installment" ? "bg-amber-500 text-white" : "bg-gray-50 text-gray-400")}>
                   أقساط
                 </button>
-                <button onClick={() => setUnifiedCat("gam3eya")}
+                <button onClick={() => { setUnifiedCat("gam3eya"); loadUnifiedItems("gam3eya"); }}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedCat === "gam3eya" ? "bg-violet-500 text-white" : "bg-gray-50 text-gray-400")}>
                   جمعية
                 </button>
@@ -2070,7 +2094,7 @@ export default function FriendsView() {
                     </div>
                   )}
                   {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
-                  <button onClick={() => { setChatShowUnified(false); setChatShowDebt(true); setTimeout(() => sendChatDebtRequest(), 100); }} disabled={submitting || !debtAmount} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">{submitting ? "جاري الإرسال..." : "إرسال طلب دين"}</button>
+                  <button onClick={() => { setChatShowUnified(false); sendChatDebtRequest(); }} disabled={submitting || !debtAmount} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">{submitting ? "جاري الإرسال..." : "إرسال طلب دين"}</button>
                 </>
               )}
               {(unifiedCat === "installment" || unifiedCat === "gam3eya") && (
@@ -2099,7 +2123,7 @@ export default function FriendsView() {
                       <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)} placeholder="المبلغ بالجنيه" required className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
                       <input type="text" value={settleDesc} onChange={(e) => setSettleDesc(e.target.value)} placeholder="وصف الدفعة (اختياري)" className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
                       {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
-                      <button onClick={() => { setSettleCategory(unifiedCat); setChatShowUnified(false); setChatShowSettle(true); setTimeout(() => sendChatSettlement(), 100); }} disabled={submitting || !settleAmount} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">{submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}</button>
+                      <button onClick={() => { setSettleCategory(unifiedCat); setChatShowUnified(false); sendChatSettlement(); }} disabled={submitting || !settleAmount} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">{submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}</button>
                     </>
                   )}
                   {unifiedMethod === "p2p" && (
@@ -2319,119 +2343,6 @@ export default function FriendsView() {
                   <button onClick={() => setChatShowP2P(false)} className="w-full text-xs text-gray-400">أغلق</button>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* مودال طلب دين داخل الشات */}
-        {chatShowDebt && chatFriend && (
-          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowDebt(false)}>
-            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold mb-1">ليّ عنده</h3>
-              <p className="text-xs text-gray-400 mb-4">عندك فلوس عند {chatFriend.friend_phone}</p>
-              <div className="flex gap-1.5 mb-3">
-                <button onClick={() => setSettleCategory("debt")}
-                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "debt" ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-400")}>
-                  دين
-                </button>
-                <button onClick={() => { setSettleCategory("installment"); setIsInstallment(true); }}
-                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "installment" ? "bg-amber-100 text-amber-700" : "bg-gray-50 text-gray-400")}>
-                  أقساط
-                </button>
-                <button onClick={() => setSettleCategory("gam3eya")}
-                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "gam3eya" ? "bg-violet-100 text-violet-700" : "bg-gray-50 text-gray-400")}>
-                  جمعية
-                </button>
-              </div>
-              <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">
-                📄 عند السداد النقدي لاحقاً سيُنشأ سند توثيقي في الشات
-              </p>
-              <input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)}
-                placeholder="المبلغ الإجمالي بالجنيه" required
-                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
-              <input type="text" value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)}
-                placeholder="وصف (اختياري)"
-                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
-              <div className="flex gap-2 mb-3">
-                <button onClick={() => setIsInstallment(false)}
-                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (!isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  دفعة واحدة
-                </button>
-                <button onClick={() => setIsInstallment(true)}
-                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  أقساط
-                </button>
-              </div>
-              {isInstallment && (
-                <div className="space-y-2 mb-3">
-                  <input type="number" value={totalInstallments} onChange={(e) => setTotalInstallments(e.target.value)}
-                    placeholder="عدد الأقساط (مثلاً: 12)" min={2}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
-                  <input type="date" value={installmentStart} onChange={(e) => setInstallmentStart(e.target.value)}
-                    className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
-                  {debtAmount && totalInstallments && Number(totalInstallments) > 0 && (
-                    <div className="bg-green-50 rounded-xl p-2 text-xs text-green-600 text-center">
-                      كل قسط: {Math.round((Number(debtAmount) / Number(totalInstallments)) * 100) / 100} جنيه × {totalInstallments} شهر
-                    </div>
-                  )}
-                </div>
-              )}
-              {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
-              <button onClick={sendChatDebtRequest} disabled={submitting}
-                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
-                {submitting ? "جاري الإرسال..." : "إرسال طلب دين"}
-              </button>
-              <button onClick={() => setChatShowDebt(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
-            </div>
-          </div>
-        )}
-
-        {/* مودال تسوية داخل الشات */}
-        {chatShowSettle && chatFriend && (
-          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowSettle(false)}>
-            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold mb-1">تسوية نقديّة</h3>
-              <p className="text-xs text-gray-400 mb-3">{chatFriend.friend_phone}</p>
-              {/* اختيار الفئة */}
-              <div className="flex gap-1.5 mb-3">
-                <button onClick={() => setSettleCategory("debt")}
-                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "debt" ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-400")}>
-                  دين
-                </button>
-                <button onClick={() => setSettleCategory("installment")}
-                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "installment" ? "bg-amber-100 text-amber-700" : "bg-gray-50 text-gray-400")}>
-                  قسط
-                </button>
-                <button onClick={() => setSettleCategory("gam3eya")}
-                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "gam3eya" ? "bg-violet-100 text-violet-700" : "bg-gray-50 text-gray-400")}>
-                  جمعية
-                </button>
-              </div>
-              <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">
-                📄 سيُنشأ سند توثيقي في الشات عند التأكيد
-              </p>
-              <div className="flex gap-2 mb-3">
-                <button onClick={() => setSettleDirection("me")}
-                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  لي عنده
-                </button>
-                <button onClick={() => setSettleDirection("friend")}
-                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
-                  أخذت منه
-                </button>
-              </div>
-              <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)}
-                placeholder="المبلغ بالجنيه" required
-                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
-              <input type="text" value={settleDesc} onChange={(e) => setSettleDesc(e.target.value)}
-                placeholder="وصف الدفعة (اختياري)"
-                className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
-              {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
-              <button onClick={sendChatSettlement} disabled={submitting}
-                className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">
-                {submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}
-              </button>
-              <button onClick={() => setChatShowSettle(false)} className="w-full text-gray-400 py-2 mt-1 text-sm">إلغاء</button>
             </div>
           </div>
         )}
