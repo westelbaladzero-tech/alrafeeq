@@ -100,6 +100,9 @@ export default function FriendsView() {
   const [chatShowDebt, setChatShowDebt] = useState(false);
   const [chatShowSettle, setChatShowSettle] = useState(false);
   const [chatShowP2P, setChatShowP2P] = useState(false);
+  const [chatShowUnified, setChatShowUnified] = useState(false);
+  const [unifiedCat, setUnifiedCat] = useState<"debt" | "installment" | "gam3eya">("debt");
+  const [unifiedMethod, setUnifiedMethod] = useState<"cash" | "p2p">("cash");
   const [p2pStep, setP2pStep] = useState<"category" | "items" | "select" | "qr" | "amount" | "done">("category");
   const [p2pCategory, setP2pCategory] = useState<any>(null);
   const [p2pItems, setP2pItems] = useState<Array<Record<string, any>>>([]);
@@ -1965,23 +1968,11 @@ export default function FriendsView() {
         <div className="p-3 bg-white border-t border-[var(--soft)] space-y-2">
           {/* صف أزرار الأموال */}
           <div className="flex items-center gap-2">
-            <button onClick={() => setChatShowDebt(true)}
-              className="flex items-center gap-1.5 bg-green-50 rounded-xl px-3 py-2 shrink-0"
-              title="ليّ عنده">
-              <HandCoins size={16} className="text-[var(--accent)]" />
-              <span className="text-xs font-bold text-[var(--accent)]">دين</span>
-            </button>
-            <button onClick={() => setChatShowSettle(true)}
+            <button onClick={() => { setUnifiedCat("debt"); setUnifiedMethod("cash"); setChatShowUnified(true); }}
               className="flex items-center gap-1.5 bg-green-50 rounded-xl px-3 py-2 shrink-0"
               title="تسوية">
               <Banknote size={16} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent)]">تسوية</span>
-            </button>
-            <button onClick={openP2P}
-              className="flex items-center gap-1.5 bg-violet-50 rounded-xl px-3 py-2 shrink-0"
-              title="معاملة P2P">
-              <CreditCard size={16} className="text-violet-600" />
-              <span className="text-xs font-bold text-violet-600">P2P</span>
             </button>
             {/* زر رفع الملفات */}
             <button onClick={() => fileInputRef.current?.click()}
@@ -2032,6 +2023,97 @@ export default function FriendsView() {
             </button>
           </div>
         </div>
+
+        {/* ===== المودال الموحّد للتسوية ===== */}
+        {chatShowUnified && chatFriend && (
+          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowUnified(false)}>
+            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold">تسوية</h3>
+                <button onClick={() => setChatShowUnified(false)} className="text-gray-400"><X size={20} /></button>
+              </div>
+              <p className="text-xs text-gray-400 mb-3">{chatFriend.friend_phone}</p>
+              <div className="flex gap-1.5 mb-3">
+                <button onClick={() => setUnifiedCat("debt")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedCat === "debt" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
+                  دين
+                </button>
+                <button onClick={() => setUnifiedCat("installment")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedCat === "installment" ? "bg-amber-500 text-white" : "bg-gray-50 text-gray-400")}>
+                  أقساط
+                </button>
+                <button onClick={() => setUnifiedCat("gam3eya")}
+                  className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedCat === "gam3eya" ? "bg-violet-500 text-white" : "bg-gray-50 text-gray-400")}>
+                  جمعية
+                </button>
+              </div>
+              {unifiedCat === "debt" && (
+                <>
+                  <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">📄 سيُنشأ سند توثيقي في الشات عند التأكيد</p>
+                  <div className="flex gap-2 mb-3">
+                    <button onClick={() => setSettleDirection("me")} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>لي عنده</button>
+                    <button onClick={() => setSettleDirection("friend")} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>أخذت منه</button>
+                  </div>
+                  <input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)} placeholder="المبلغ الإجمالي بالجنيه" required className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
+                  <input type="text" value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)} placeholder="وصف (اختياري)" className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+                  <div className="flex gap-2 mb-3">
+                    <button onClick={() => setIsInstallment(false)} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (!isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>دفعة واحدة</button>
+                    <button onClick={() => setIsInstallment(true)} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (isInstallment ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>أقساط</button>
+                  </div>
+                  {isInstallment && (
+                    <div className="space-y-2 mb-3">
+                      <input type="number" value={totalInstallments} onChange={(e) => setTotalInstallments(e.target.value)} placeholder="عدد الأقساط" min={2} className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                      <input type="date" value={installmentStart} onChange={(e) => setInstallmentStart(e.target.value)} className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 text-sm" />
+                      {debtAmount && totalInstallments && Number(totalInstallments) > 0 && (
+                        <div className="bg-green-50 rounded-xl p-2 text-xs text-green-600 text-center">كل قسط: {Math.round((Number(debtAmount) / Number(totalInstallments)) * 100) / 100} جنيه × {totalInstallments} شهر</div>
+                      )}
+                    </div>
+                  )}
+                  {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
+                  <button onClick={() => { setChatShowUnified(false); setChatShowDebt(true); setTimeout(() => sendChatDebtRequest(), 100); }} disabled={submitting || !debtAmount} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">{submitting ? "جاري الإرسال..." : "إرسال طلب دين"}</button>
+                </>
+              )}
+              {(unifiedCat === "installment" || unifiedCat === "gam3eya") && (
+                <>
+                  <div className="flex gap-2 mb-3">
+                    <button onClick={() => setUnifiedMethod("cash")} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedMethod === "cash" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>نقدي</button>
+                    <button onClick={() => setUnifiedMethod("p2p")} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (unifiedMethod === "p2p" ? "bg-violet-500 text-white" : "bg-gray-50 text-gray-400")}>P2P</button>
+                  </div>
+                  {p2pItems.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      <p className="text-[10px] text-gray-500">الأقساط المستحقة:</p>
+                      {p2pItems.map((item: any, i: number) => (
+                        <button key={i} onClick={() => setP2pSelectedItem(item)} className={"w-full text-right rounded-xl p-2.5 border transition " + (p2pSelectedItem === item ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
+                          <div className="flex justify-between items-center"><span className="text-xs font-bold">{item.amount || item.installment_amount} جنيه</span><span className="text-[10px] text-gray-400">قسط {(item.paid_installments || 0) + 1}/{item.total_installments}</span></div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {unifiedMethod === "cash" && (
+                    <>
+                      <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">📄 سيُنشأ سند توثيقي في الشات عند التأكيد</p>
+                      <div className="flex gap-2 mb-3">
+                        <button onClick={() => setSettleDirection("me")} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>لي عنده</button>
+                        <button onClick={() => setSettleDirection("friend")} className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "friend" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>أخذت منه</button>
+                      </div>
+                      <input type="number" value={settleAmount} onChange={(e) => setSettleAmount(e.target.value)} placeholder="المبلغ بالجنيه" required className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
+                      <input type="text" value={settleDesc} onChange={(e) => setSettleDesc(e.target.value)} placeholder="وصف الدفعة (اختياري)" className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-3 text-sm" />
+                      {actionErr && <div className="text-red-500 text-sm mb-2 text-center">{actionErr}</div>}
+                      <button onClick={() => { setSettleCategory(unifiedCat); setChatShowUnified(false); setChatShowSettle(true); setTimeout(() => sendChatSettlement(), 100); }} disabled={submitting || !settleAmount} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 font-bold disabled:opacity-50 text-sm">{submitting ? "جاري الإرسال..." : "إرسال طلب تأكيد"}</button>
+                    </>
+                  )}
+                  {unifiedMethod === "p2p" && (
+                    <>
+                      <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">💳 سيتم الدفع عبر وسيلة رقمية (QR + إيصال)</p>
+                      <button onClick={() => { setChatShowUnified(false); openP2P(); }} className="w-full rounded-2xl bg-violet-500 text-white py-3 font-bold text-sm flex items-center justify-center gap-2"><CreditCard size={18} /> ابدأ معاملة P2P</button>
+                    </>
+                  )}
+                </>
+              )}
+              <button onClick={() => setChatShowUnified(false)} className="w-full text-gray-400 py-2 mt-2 text-sm">إلغاء</button>
+            </div>
+          </div>
+        )}
 
         {/* مودال معاملة P2P */}
         {chatShowP2P && chatFriend && (
