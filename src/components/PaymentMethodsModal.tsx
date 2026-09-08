@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
-import { CreditCard, Wallet, X, Plus, Trash2, Loader2, Check, Landmark } from "lucide-react";
+import { CreditCard, Wallet, X, Plus, Trash2, Loader2, Check, Landmark, Bitcoin } from "lucide-react";
 import { getResolvedUserId } from "@/lib/client-id";
 import PayPalGuide from "./PayPalGuide";
+import BybitGuide from "./BybitGuide";
 
 interface Method {
   id: string;
@@ -45,6 +46,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
   const [lastFour, setLastFour] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showBybitGuide, setShowBybitGuide] = useState(false);
 
   useEffect(() => {
     getResolvedUserId().then(id => {
@@ -181,10 +183,16 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
               className="w-full flex items-center justify-center gap-2 bg-violet-50 text-violet-600 rounded-2xl py-3 font-bold text-sm">
               <Plus size={18} /> أضف وسيلة دفع
             </button>
-          <button onClick={() => setShowGuide(true)}
-            className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-2xl py-2.5 font-bold text-xs">
-              <Globe size={16} /> كيف أنشئ حساب PayPal مجاناً؟
+          <div className="flex gap-2">
+            <button onClick={() => setShowGuide(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 rounded-2xl py-2.5 font-bold text-[11px]">
+              <Globe size={14} /> PayPal
             </button>
+            <button onClick={() => setShowBybitGuide(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-amber-50 text-amber-600 rounded-2xl py-2.5 font-bold text-[11px]">
+              <Bitcoin size={14} /> Bybit
+            </button>
+          </div>
           )}
           {showAdd && (
             <div className="bg-violet-50/50 rounded-2xl p-4 space-y-3">
@@ -294,6 +302,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
         </div>
       </div>
       {showGuide && <PayPalGuide onClose={() => setShowGuide(false)} />}
+      {showBybitGuide && <BybitGuide onClose={() => setShowBybitGuide(false)} />}
     </div>
   );
 }
