@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText } from "lucide-react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
@@ -89,6 +89,13 @@ export default function FriendsView() {
   const [msgSending, setMsgSending] = useState(false);
   const [chatShowDebt, setChatShowDebt] = useState(false);
   const [chatShowSettle, setChatShowSettle] = useState(false);
+  const [chatShowP2P, setChatShowP2P] = useState(false);
+  const [p2pStep, setP2pStep] = useState<"select" | "amount" | "done">("select");
+  const [p2pFriendMethods, setP2pFriendMethods] = useState<any[]>([]);
+  const [p2pSelectedMethod, setP2pSelectedMethod] = useState<any>(null);
+  const [p2pAmount, setP2pAmount] = useState("");
+  const [p2pLoading, setP2pLoading] = useState(false);
+  const [p2pResult, setP2pResult] = useState<any>(null);
   const [settleDirection, setSettleDirection] = useState<"me" | "friend">("me");
   const [pendingMsgs, setPendingMsgs] = useState<any[]>([]);
   const [speakLang, setSpeakLang] = useState("ar-EG");
@@ -749,6 +756,59 @@ export default function FriendsView() {
     utter.lang = lang;
     utter.rate = 0.9;
     window.speechSynthesis.speak(utter);
+  }
+
+  // فتح نافذة P2P — يجلب وسائل دفع الصديق
+  async function openP2P() {
+    if (!chatFriend) return;
+    setChatShowP2P(true);
+    setP2pStep("select");
+    setP2pAmount("");
+    setP2pSelectedMethod(null);
+    setP2pResult(null);
+    setP2pLoading(true);
+    try {
+      const res = await fetch(`/api/payment-methods?friend_id=${chatFriend.friend_id}`, {
+        headers: { "x-client-id": uid || "" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setP2pFriendMethods(data.methods || []);
+      } else {
+        setP2pFriendMethods([]);
+      }
+    } catch {
+      setP2pFriendMethods([]);
+    }
+    setP2pLoading(false);
+  }
+
+  // بدء معاملة P2P
+  async function initiateP2P() {
+    if (!chatFriend || !p2pAmount || !p2pSelectedMethod) return;
+    setP2pLoading(true);
+    try {
+      const res = await fetch("/api/p2p/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+        body: JSON.stringify({
+          to_user: chatFriend.friend_id,
+          friendship_id: chatFriend.friendship_id,
+          amount: p2pAmount,
+          method: p2pSelectedMethod.method,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setP2pResult(data);
+        setP2pStep("done");
+      } else {
+        showToast(data.error || "تعذّر بدء المعاملة");
+      }
+    } catch {
+      showToast("خطأ في الاتصال");
+    }
+    setP2pLoading(false);
   }
 
   // ترجمة رسالة
@@ -1583,6 +1643,12 @@ export default function FriendsView() {
               <Banknote size={16} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent)]">تسوية</span>
             </button>
+            <button onClick={openP2P}
+              className="flex items-center gap-1.5 bg-violet-50 rounded-xl px-3 py-2 shrink-0"
+              title="معاملة P2P">
+              <CreditCard size={16} className="text-violet-600" />
+              <span className="text-xs font-bold text-violet-600">P2P</span>
+            </button>
             {/* زر رفع الملفات */}
             <button onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2 shrink-0"
@@ -1632,6 +1698,97 @@ export default function FriendsView() {
             </button>
           </div>
         </div>
+
+        {/* مودال معاملة P2P */}
+        {chatShowP2P && chatFriend && (
+          <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowP2P(false)}>
+            <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <CreditCard size={20} className="text-violet-600" />
+                  معاملة P2P
+                </h3>
+                <button onClick={() => setChatShowP2P(false)} className="text-gray-400"><X size={20} /></button>
+              </div>
+
+              {/* الخطوة 1: اختيار الوسيلة */}
+              {p2pStep === "select" && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-500 mb-2">اختر وسيلة استلام {chatFriend.friend_name}:</p>
+                  {p2pLoading ? (
+                    <div className="flex items-center justify-center py-8"><Loader2 size={24} className="animate-spin text-violet-500" /></div>
+                  ) : p2pFriendMethods.length === 0 ? (
+                    <div className="text-center py-6">
+                      <p className="text-sm text-gray-400 mb-3">لم يسجّل صديقك وسائل دفع بعد</p>
+                      <p className="text-xs text-gray-300">اطلب منه تسجيل رقم محفظته في الإعدادات</p>
+                    </div>
+                  ) : (
+                    p2pFriendMethods.map((m, i) => (
+                      <button key={i} onClick={() => { setP2pSelectedMethod(m); setP2pStep("amount"); }}
+                        className="w-full flex items-center gap-3 bg-gray-50 rounded-2xl p-3 hover:bg-violet-50 transition text-right">
+                        <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                          <Wallet size={16} className="text-violet-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-bold">{m.method === "vodafone_cash" ? "فودافون كاش" : m.method === "instapay" ? "إنستاباي" : "أخرى"}</div>
+                          <div className="text-xs text-gray-500" dir="ltr">{m.identifier}</div>
+                        </div>
+                        {m.is_primary && <span className="text-[9px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full">رئيسي</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* الخطوة 2: إدخال المبلغ */}
+              {p2pStep === "amount" && p2pSelectedMethod && (
+                <div className="space-y-4">
+                  <div className="bg-violet-50 rounded-2xl p-3">
+                    <div className="text-xs text-gray-500 mb-1">الوسيلة المختارة</div>
+                    <div className="text-sm font-bold">{p2pSelectedMethod.method === "vodafone_cash" ? "فودافون كاش" : p2pSelectedMethod.method === "instapay" ? "إنستاباي" : "أخرى"}</div>
+                    <div className="text-xs text-gray-600" dir="ltr">{p2pSelectedMethod.identifier}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">المبلغ (جنيه)</label>
+                    <input type="number" value={p2pAmount} onChange={(e) => setP2pAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-violet-100 text-lg font-bold" />
+                  </div>
+                  <button onClick={initiateP2P} disabled={!p2pAmount || p2pLoading}
+                    className="w-full bg-violet-600 text-white rounded-2xl py-3 font-bold disabled:opacity-40 flex items-center justify-center gap-2">
+                    {p2pLoading ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                    ابدأ المعاملة
+                  </button>
+                  <button onClick={() => setP2pStep("select")} className="w-full text-xs text-gray-400">رجوع</button>
+                </div>
+              )}
+
+              {/* الخطوة 3: النتيجة */}
+              {p2pStep === "done" && p2pResult && (
+                <div className="text-center space-y-4 py-4">
+                  <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+                    <Check size={32} className="text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">تم بدء المعاملة ✅</p>
+                    <p className="text-xs text-gray-500 mt-1">المبلغ: {p2pAmount} جنيه</p>
+                    <p className="text-xs text-gray-500">رقم المعاملة: {p2pResult.id?.slice(0, 8)}</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-2xl p-3 text-right">
+                    <p className="text-xs text-amber-700 font-medium mb-1">الخطوات التالية:</p>
+                    <ol className="text-xs text-amber-600 space-y-1 list-decimal list-inside">
+                      <li>حوّل {p2pAmount} جنيه عبر {p2pSelectedMethod.method === "vodafone_cash" ? "فودافون كاش" : p2pSelectedMethod.method === "instapay" ? "إنستاباي" : "الوسيلة المختارة"}</li>
+                      <li>إلى: <span dir="ltr">{p2pSelectedMethod.identifier}</span></li>
+                      <li>ارفع إيصال التحويل في الشات</li>
+                      <li>انتظر تأكيد {chatFriend.friend_name}</li>
+                    </ol>
+                  </div>
+                  <button onClick={() => setChatShowP2P(false)} className="w-full bg-violet-600 text-white rounded-2xl py-3 font-bold">تم</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* مودال طلب دين داخل الشات */}
         {chatShowDebt && chatFriend && (
