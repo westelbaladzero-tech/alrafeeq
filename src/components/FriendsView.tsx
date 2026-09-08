@@ -97,7 +97,10 @@ export default function FriendsView() {
   const [chatShowDebt, setChatShowDebt] = useState(false);
   const [chatShowSettle, setChatShowSettle] = useState(false);
   const [chatShowP2P, setChatShowP2P] = useState(false);
-  const [p2pStep, setP2pStep] = useState<"select" | "amount" | "done">("select");
+  const [p2pStep, setP2pStep] = useState<"category" | "items" | "select" | "amount" | "done">("category");
+  const [p2pCategory, setP2pCategory] = useState<any>(null);
+  const [p2pItems, setP2pItems] = useState<any[]>([]);
+  const [p2pSelectedItem, setP2pSelectedItem] = useState<any>(null);
   const [p2pFriendMethods, setP2pFriendMethods] = useState<any[]>([]);
   const [p2pSelectedMethod, setP2pSelectedMethod] = useState<any>(null);
   const [p2pAmount, setP2pAmount] = useState("");
@@ -772,11 +775,67 @@ export default function FriendsView() {
     window.speechSynthesis.speak(utter);
   }
 
+  // جلب وسائل الدفع المشتركة
+  async function fetchP2PMethods() {
+    if (!chatFriend || !uid) return;
+    setP2pLoading(true);
+    try {
+      const friendRes = await fetch("/api/payment-methods?friend_id=" + chatFriend.friend_id, { headers: { "x-client-id": uid } });
+      const friendData = await friendRes.json();
+      const friendMethods = friendData.ok ? (friendData.methods || []) : [];
+      const myRes = await fetch("/api/payment-methods", { headers: { "x-client-id": uid } });
+      const myData = await myRes.json();
+      const myMethods = myData.ok ? (myData.methods || []) : [];
+      const myMethodTypes = new Set(myMethods.map((m) => m.method));
+      const shared = friendMethods.filter((m) => myMethodTypes.has(m.method));
+      setP2pFriendMethods(shared);
+    } catch { setP2pFriendMethods([]); }
+    setP2pLoading(false);
+  }
+
+  // جلب الاقساط بين الصديقين
+  async function fetchP2PInstallments() {
+    if (!chatFriend || !uid) return;
+    setP2pLoading(true);
+    const sb = getSupabase();
+    if (!sb) { setP2pLoading(false); return; }
+    const { data } = await sb.from("debt_requests")
+      .select("id, amount, description, is_installment, total_installments, installment_amount, paid_installments, status")
+      .eq("is_installment", true)
+      .eq("status", "confirmed")
+      .or("and(creditor.eq." + uid + ",debtor.eq." + chatFriend.friend_id + "),and(creditor.eq." + chatFriend.friend_id + ",debtor.eq." + uid + ")");
+    const unpaid = (data || []).filter((d) => (d.paid_installments || 0) < (d.total_installments || 0));
+    setP2pItems(unpaid);
+    setP2pLoading(false);
+    setP2pStep("items");
+  }
+
+  // جلب الجمعية المشتركة
+  async function fetchP2PGam3eya() {
+    if (!chatFriend) return;
+    setP2pLoading(true);
+    if (chatFriend.gam3eya_total && chatFriend.gam3eya_amount) {
+      setP2pItems([{
+        amount: chatFriend.gam3eya_amount,
+        description: "جمعية " + chatFriend.gam3eya_total + " دورات",
+        total: chatFriend.gam3eya_total,
+        completed: chatFriend.gam3eya_completed || 0,
+      }]);
+    } else {
+      setP2pItems([]);
+    }
+    setP2pLoading(false);
+    setP2pStep("items");
+  }
+
   // فتح نافذة P2P — يجلب وسائل دفع الصديق + وسائلي أنا (للتطابق)
   async function openP2P() {
     if (!chatFriend) return;
     setChatShowP2P(true);
-    setP2pStep("select");
+    setP2pStep("category");
+    setP2pCategory(null);
+    setP2pItems([]);
+    setP2pSelectedItem(null);
     setP2pAmount("");
     setP2pSelectedMethod(null);
     setP2pResult(null);
@@ -1906,6 +1965,73 @@ export default function FriendsView() {
                 </h3>
                 <button onClick={() => setChatShowP2P(false)} className="text-gray-400"><X size={20} /></button>
               </div>
+
+              {/* الخطوة 0: اختيار الفئة */}
+              {p2pStep === "category" && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-500 mb-2">اختر نوع المعاملة:</p>
+                  <button onClick={() => { setP2pCategory("debt"); setP2pStep("select"); fetchP2PMethods(); }}
+                    className="w-full flex items-center gap-3 bg-gray-50 rounded-2xl p-3 hover:bg-violet-50 transition text-right">
+                    <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                      <HandCoins size={16} className="text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold">دين عادي</div>
+                      <div className="text-[10px] text-gray-400">تسديد دين بينكما</div>
+                    </div>
+                  </button>
+                  <button onClick={() => { setP2pCategory("installment"); fetchP2PInstallments(); }}
+                    className="w-full flex items-center gap-3 bg-gray-50 rounded-2xl p-3 hover:bg-violet-50 transition text-right">
+                    <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                      <CalendarClock size={16} className="text-amber-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold">اقساط</div>
+                      <div className="text-[10px] text-gray-400">سداد قسط محدد</div>
+                    </div>
+                  </button>
+                  <button onClick={() => { setP2pCategory("gam3eya"); fetchP2PGam3eya(); }}
+                    className="w-full flex items-center gap-3 bg-gray-50 rounded-2xl p-3 hover:bg-violet-50 transition text-right">
+                    <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                      <Users size={16} className="text-violet-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-bold">جمعية</div>
+                      <div className="text-[10px] text-gray-400">سداد نصيب جمعية</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* اختيار القسط/الجمعية */}
+              {p2pStep === "items" && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-500 mb-2">
+                    {p2pCategory === "installment" ? "اختر القسط:" : "اختر الجمعية:"}
+                  </p>
+                  {p2pLoading ? (
+                    <div className="flex items-center justify-center py-6"><Loader2 size={20} className="animate-spin text-violet-500" /></div>
+                  ) : p2pItems.length === 0 ? (
+                    <div className="text-center py-6">
+                      <p className="text-sm text-gray-400">لا توجد عناصر متاحة</p>
+                      <button onClick={() => setP2pStep("category")} className="mt-2 text-xs text-violet-600 font-bold">رجوع</button>
+                    </div>
+                  ) : (
+                    p2pItems.map((item, i) => (
+                      <button key={i} onClick={() => { setP2pSelectedItem(item); setP2pAmount(String(item.amount || item.installment_amount || "")); setP2pStep("select"); fetchP2PMethods(); }}
+                        className="w-full flex items-center gap-3 bg-gray-50 rounded-2xl p-3 hover:bg-violet-50 transition text-right">
+                        <div className="flex-1">
+                          <div className="text-sm font-bold">{item.amount || item.installment_amount} جنيه</div>
+                          {item.is_installment && (
+                            <div className="text-[10px] text-gray-400">قسط {(item.paid_installments || 0) + 1}/{item.total_installments}</div>
+                          )}
+                          {item.description && <div className="text-[10px] text-gray-400">{item.description}</div>}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
 
               {/* الخطوة 1: اختيار الوسيلة */}
               {p2pStep === "select" && (
