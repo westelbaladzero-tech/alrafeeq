@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { CreditCard, Wallet, X, Plus, Trash2, Loader2, Check, Landmark, Bitcoin } from "lucide-react";
+import { CreditCard, Wallet, X, Plus, Trash2, Loader2, Check, Landmark, Bitcoin, Globe } from "lucide-react";
 import { getResolvedUserId } from "@/lib/client-id";
 import PayPalGuide from "./PayPalGuide";
 import BybitGuide from "./BybitGuide";

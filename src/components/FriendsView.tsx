@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard } from "lucide-react";
+import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard, CalendarClock, RefreshCw } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import PaymentMethodsModal from "./PaymentMethodsModal";
 import QRCode, { downloadQR } from "./QRCode";
@@ -102,7 +102,7 @@ export default function FriendsView() {
   const [chatShowP2P, setChatShowP2P] = useState(false);
   const [p2pStep, setP2pStep] = useState<"category" | "items" | "select" | "qr" | "amount" | "done">("category");
   const [p2pCategory, setP2pCategory] = useState<any>(null);
-  const [p2pItems, setP2pItems] = useState<any[]>([]);
+  const [p2pItems, setP2pItems] = useState<Array<Record<string, any>>>([]);
   const [p2pSelectedItem, setP2pSelectedItem] = useState<any>(null);
   const [p2pFriendMethods, setP2pFriendMethods] = useState<any[]>([]);
   const [p2pSelectedMethod, setP2pSelectedMethod] = useState<any>(null);
@@ -789,8 +789,8 @@ export default function FriendsView() {
       const myRes = await fetch("/api/payment-methods", { headers: { "x-client-id": uid } });
       const myData = await myRes.json();
       const myMethods = myData.ok ? (myData.methods || []) : [];
-      const myMethodTypes = new Set(myMethods.map((m) => m.method));
-      const shared = friendMethods.filter((m) => myMethodTypes.has(m.method));
+      const myMethodTypes = new Set(myMethods.map((m: any) => m.method));
+      const shared = friendMethods.filter((m: any) => myMethodTypes.has(m.method));
       setP2pFriendMethods(shared);
     } catch { setP2pFriendMethods([]); }
     setP2pLoading(false);
@@ -2069,7 +2069,7 @@ export default function FriendsView() {
               {/* الخطوة 1: اختيار الوسيلة */}
               {p2pStep === "select" && (
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-500 mb-2">اختر وسيلة استلام {chatFriend.friend_name}:</p>
+                  <p className="text-sm text-gray-500 mb-2">اختر وسيلة استلام {chatFriend.friend_phone}:</p>
                   {p2pLoading ? (
                     <div className="flex items-center justify-center py-8"><Loader2 size={24} className="animate-spin text-violet-500" /></div>
                   ) : p2pFriendMethods.length === 0 ? (
@@ -2178,7 +2178,7 @@ export default function FriendsView() {
                       <li>حوّل {p2pAmount} جنيه عبر {p2pSelectedMethod.method === "vodafone_cash" ? "فودافون كاش" : p2pSelectedMethod.method === "instapay" ? "إنستاباي" : "الوسيلة المختارة"}</li>
                       <li>إلى: <span dir="ltr">{p2pSelectedMethod.identifier}</span></li>
                       <li>ارفع إيصال التحويل في الشات</li>
-                      <li>انتظر تأكيد {chatFriend.friend_name}</li>
+                      <li>انتظر تأكيد {chatFriend.friend_phone}</li>
                     </ol>
                   </div>
                   {/* رفع إيصال التحويل */}
