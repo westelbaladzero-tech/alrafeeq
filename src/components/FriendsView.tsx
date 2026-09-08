@@ -36,6 +36,7 @@ interface PendingDebt {
   paid_installments: number | null;
   start_date: string | null;
   friend_id: string;
+  status?: string;
 }
 
 interface PendingSettlement {
