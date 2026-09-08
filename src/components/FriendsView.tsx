@@ -62,6 +62,8 @@ export default function FriendsView() {
   const [debtDesc, setDebtDesc] = useState("");
   const [settleAmount, setSettleAmount] = useState("");
   const [settleDesc, setSettleDesc] = useState("");
+  const [settleCategory, setSettleCategory] = useState<"debt" | "installment" | "gam3eya">("debt");
+  const [settleItemId, setSettleItemId] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPin, setShowPin] = useState(false);
@@ -1127,7 +1129,7 @@ export default function FriendsView() {
           to_user: toUser,
           friendship_id: chatFriend.friendship_id,
           amount: amt,
-          description: settleDesc || null,
+          description: (settleCategory === "debt" ? "دين" : settleCategory === "installment" ? "قسط" : "جمعية") + (settleDesc ? " — " + settleDesc : ""),
           status: "pending",
         }),
       });
@@ -1565,7 +1567,7 @@ export default function FriendsView() {
           // لو تأكيد تسوية ← حدّث paid_installments لو الدين أقساط
           if (pendingAction.type === "settlement" && pendingAction.accept) {
             const { data: sett } = await sb2.from("settlements")
-              .select("from_user, to_user, amount")
+              .select("from_user, to_user, amount, friendship_id, description")
               .eq("id", pendingAction.id).maybeSingle();
             if (sett) {
               // من يدفع لمن: from_user (المدين) → to_user (الدائن)
@@ -1595,6 +1597,21 @@ export default function FriendsView() {
                     .eq("id", debt.id);
                 }
               }
+            }
+            // أنشئ سند توثيقي في الشات
+            if (sett.friendship_id) {
+              await sendSystemMessage(
+                sett.friendship_id,
+                "📄 سند تسوية موثّق
+" +
+                "المبلغ: " + sett.amount + " جنيه
+" +
+                "النوع: تسوية نقدية
+" +
+                (sett.description ? ("الوصف: " + sett.description + "
+") : "") +
+                "الحالة: موثّق ✅"
+              );
             }
           }
         }
@@ -2126,6 +2143,23 @@ export default function FriendsView() {
             <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold mb-1">ليّ عنده</h3>
               <p className="text-xs text-gray-400 mb-4">عندك فلوس عند {chatFriend.friend_phone}</p>
+              <div className="flex gap-1.5 mb-3">
+                <button onClick={() => setSettleCategory("debt")}
+                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "debt" ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-400")}>
+                  دين
+                </button>
+                <button onClick={() => { setSettleCategory("installment"); setIsInstallment(true); }}
+                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "installment" ? "bg-amber-100 text-amber-700" : "bg-gray-50 text-gray-400")}>
+                  أقساط
+                </button>
+                <button onClick={() => setSettleCategory("gam3eya")}
+                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "gam3eya" ? "bg-violet-100 text-violet-700" : "bg-gray-50 text-gray-400")}>
+                  جمعية
+                </button>
+              </div>
+              <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">
+                📄 عند السداد النقدي لاحقاً سيُنشأ سند توثيقي في الشات
+              </p>
               <input type="number" value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)}
                 placeholder="المبلغ الإجمالي بالجنيه" required
                 className="w-full bg-gray-50 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-green-100 mb-2 text-sm" />
@@ -2170,8 +2204,26 @@ export default function FriendsView() {
         {chatShowSettle && chatFriend && (
           <div className="fixed inset-0 bg-black/30 flex items-end justify-center z-50" onClick={() => setChatShowSettle(false)}>
             <div className="bg-white w-full max-w-sm rounded-t-3xl p-5" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-bold mb-1">تسوية</h3>
-              <p className="text-xs text-gray-400 mb-4">{chatFriend.friend_phone}</p>
+              <h3 className="text-lg font-bold mb-1">تسوية نقديّة</h3>
+              <p className="text-xs text-gray-400 mb-3">{chatFriend.friend_phone}</p>
+              {/* اختيار الفئة */}
+              <div className="flex gap-1.5 mb-3">
+                <button onClick={() => setSettleCategory("debt")}
+                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "debt" ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-400")}>
+                  دين
+                </button>
+                <button onClick={() => setSettleCategory("installment")}
+                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "installment" ? "bg-amber-100 text-amber-700" : "bg-gray-50 text-gray-400")}>
+                  قسط
+                </button>
+                <button onClick={() => setSettleCategory("gam3eya")}
+                  className={"flex-1 py-2 rounded-xl text-[10px] font-bold transition " + (settleCategory === "gam3eya" ? "bg-violet-100 text-violet-700" : "bg-gray-50 text-gray-400")}>
+                  جمعية
+                </button>
+              </div>
+              <p className="text-[10px] text-violet-500 mb-3 bg-violet-50 rounded-lg px-2 py-1">
+                📄 سيُنشأ سند توثيقي في الشات عند التأكيد
+              </p>
               <div className="flex gap-2 mb-3">
                 <button onClick={() => setSettleDirection("me")}
                   className={"flex-1 py-2.5 rounded-xl text-xs font-bold transition " + (settleDirection === "me" ? "bg-[var(--accent)] text-white" : "bg-gray-50 text-gray-400")}>
