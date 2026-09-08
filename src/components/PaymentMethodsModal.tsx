@@ -179,20 +179,22 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
             ))
           )}
           {!showAdd && (
-            <button onClick={() => setShowAdd(true)}
-              className="w-full flex items-center justify-center gap-2 bg-violet-50 text-violet-600 rounded-2xl py-3 font-bold text-sm">
-              <Plus size={18} /> أضف وسيلة دفع
-            </button>
-          <div className="flex gap-2">
-            <button onClick={() => setShowGuide(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 rounded-2xl py-2.5 font-bold text-[11px]">
-              <Globe size={14} /> PayPal
-            </button>
-            <button onClick={() => setShowBybitGuide(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-amber-50 text-amber-600 rounded-2xl py-2.5 font-bold text-[11px]">
-              <Bitcoin size={14} /> Bybit
-            </button>
-          </div>
+            <>
+              <button onClick={() => setShowAdd(true)}
+                className="w-full flex items-center justify-center gap-2 bg-violet-50 text-violet-600 rounded-2xl py-3 font-bold text-sm">
+                <Plus size={18} /> أضف وسيلة دفع
+              </button>
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => setShowGuide(true)}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 text-blue-600 rounded-2xl py-2.5 font-bold text-[11px]">
+                  <Globe size={14} /> PayPal
+                </button>
+                <button onClick={() => setShowBybitGuide(true)}
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-amber-50 text-amber-600 rounded-2xl py-2.5 font-bold text-[11px]">
+                  <Bitcoin size={14} /> Bybit
+                </button>
+              </div>
+            </>
           )}
           {showAdd && (
             <div className="bg-violet-50/50 rounded-2xl p-4 space-y-3">
