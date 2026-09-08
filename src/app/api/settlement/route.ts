@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { getUserIdSync } from "@/lib/client-id";
 import { validateAmount, sanitizeText } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
@@ -11,9 +12,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
-  const { from_user, to_user, friendship_id, amount, description, linked_debt_id, status } = await req.json();
-  
-  if (!from_user || !to_user || !friendship_id || !amount) {
+  // ─── تحقق من هوية المستخدم ───
+  const userId = getUserIdSync();
+  if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
+
+  const { to_user, friendship_id, amount, description, linked_debt_id, status } = await req.json();
+
+  if (!to_user || !friendship_id || !amount) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
   }
 
@@ -26,8 +31,19 @@ export async function POST(req: NextRequest) {
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
+  // ─── تحقق من الصداقة: المستخدم يجب أن يكون طرفاً فيها ───
+  const { data: ship } = await admin.from("friendships")
+    .select("id, user_a, user_b")
+    .eq("id", friendship_id)
+    .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+    .limit(1);
+  if (!ship || ship.length === 0) {
+    return NextResponse.json({ error: "غير مصرّح — هذه ليست صداقتك" }, { status: 403 });
+  }
+
+  // ─── from_user = المستخدم المصادق عليه دائماً ───
   const { data, error } = await admin.from("settlements").insert({
-    from_user,
+    from_user: userId,
     to_user,
     friendship_id,
     amount: amt.value,
