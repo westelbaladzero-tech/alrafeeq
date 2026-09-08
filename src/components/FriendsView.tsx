@@ -1628,20 +1628,7 @@ export default function FriendsView() {
                 "الحالة: نهائي موثّق ✅"
               );
             }
-            if (sett.friendship_id) {
-              await sendSystemMessage(
-                sett.friendship_id,
-                "📄 سند تسوية موثّق
-" +
-                "المبلغ: " + sett.amount + " جنيه
-" +
-                "النوع: تسوية نقدية
-" +
-                (sett.description ? ("الوصف: " + sett.description + "
-") : "") +
-                "الحالة: موثّق ✅"
-              );
-            }
+
           }
         }
       }
