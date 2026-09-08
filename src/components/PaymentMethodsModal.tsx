@@ -25,6 +25,7 @@ const METHOD_LABELS: Record<string, string> = {
   bank_account: "حساب بنكي",
   card: "بطاقة",
   paypal: "PayPal",
+  bybit: "Bybit",
   other: "أخرى",
 };
 
@@ -77,6 +78,10 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
       if (method === "card") {
         body.card_type = cardType;
         body.last_four = lastFour;
+      }
+      if (method === "bybit") {
+        // رابط صفحة Bybit P2P للتحويل
+        body.payment_link = "https://www.bybit.com/en/p2p";
       }
       if (method === "paypal") {
         // ولّد رابط paypal.me تلقائياً
@@ -195,6 +200,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
                   </optgroup>
                   <option value="instapay">إنستاباي</option>
                   <option value="paypal">PayPal (دولي)</option>
+                  <option value="bybit">Bybit (عملات رقمية)</option>
                   <option value="bank_account">حساب بنكي</option>
                   <option value="card">بطاقة (آخر 4 أرقام)</option>
                 </select>
@@ -204,15 +210,22 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
                   <label className="text-xs text-gray-500 block mb-1.5">
                     {method === "instapay" ? "IPA (name@instapay)" :
                      method === "paypal" ? "بريد PayPal أو paypal.me/username" :
+                     method === "bybit" ? "Bybit UID (رقم مستخدم Bybit)" :
                      "رقم الهاتف (01xxxxxxxxx)"}
                   </label>
                   <input type="text" value={identifier} onChange={e => setIdentifier(e.target.value)}
                     placeholder={method === "instapay" ? "name@instapay" :
-                      method === "paypal" ? "name@example.com أو myname" : "01xxxxxxxxx"} dir="ltr"
+                      method === "paypal" ? "name@example.com أو myname" :
+                      method === "bybit" ? "123456789" : "01xxxxxxxxx"} dir="ltr"
                     className="w-full bg-white rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-100" />
                   {method === "paypal" && (
                     <p className="text-[10px] text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">
                       💡 يتم توليد رابط paypal.me تلقائياً من اسم المستخدم
+                    </p>
+                  )}
+                  {method === "bybit" && (
+                    <p className="text-[10px] text-amber-600 mt-1 bg-amber-50 rounded-lg px-2 py-1">
+                      💡 ابحث عن UID في: Profile ← Bybit ID (أرقام فقط)
                     </p>
                   )}
                 </div>
