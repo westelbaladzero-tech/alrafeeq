@@ -807,7 +807,7 @@ export default function FriendsView() {
       .eq("is_installment", true)
       .eq("status", "confirmed")
       .or("and(creditor.eq." + uid + ",debtor.eq." + chatFriend.friend_id + "),and(creditor.eq." + chatFriend.friend_id + ",debtor.eq." + uid + ")");
-    const unpaid = (data || []).filter((d) => (d.paid_installments || 0) < (d.total_installments || 0));
+    const unpaid = ((data || []) as any[]).filter((d: any) => (d.paid_installments || 0) < (d.total_installments || 0));
     setP2pItems(unpaid);
     setP2pLoading(false);
     setP2pStep("items");
