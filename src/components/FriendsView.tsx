@@ -96,6 +96,11 @@ export default function FriendsView() {
   const [p2pAmount, setP2pAmount] = useState("");
   const [p2pLoading, setP2pLoading] = useState(false);
   const [p2pResult, setP2pResult] = useState<any>(null);
+  const [p2pReceiptUploading, setP2pReceiptUploading] = useState(false);
+  const [receiptInputRef] = useState<any>(null);
+  const [pendingP2P, setPendingP2P] = useState<any[]>([]);
+  const [showP2PConfirm, setShowP2PConfirm] = useState(false);
+  const [p2pConfirmItem, setP2pConfirmItem] = useState<any>(null);
   const [settleDirection, setSettleDirection] = useState<"me" | "friend">("me");
   const [pendingMsgs, setPendingMsgs] = useState<any[]>([]);
   const [speakLang, setSpeakLang] = useState("ar-EG");
@@ -209,6 +214,7 @@ export default function FriendsView() {
     localStorage.setItem("alrafeeq-chat-ship", friend.friendship_id);
     localStorage.removeItem("alrafeeq-selected-ship");
     setMessages([]);
+    fetchPendingP2P();
     // استعد الرسائل المعلّقة من localStorage لهذا الشات
     const pending = JSON.parse(localStorage.getItem("alrafeeq-pending-msgs") || "[]")
       .filter((pm: any) => pm.shipId === friend.friendship_id)
@@ -804,6 +810,81 @@ export default function FriendsView() {
         setP2pStep("done");
       } else {
         showToast(data.error || "تعذّر بدء المعاملة");
+      }
+    } catch {
+      showToast("خطأ في الاتصال");
+    }
+    setP2pLoading(false);
+  }
+
+  // رفع إيصال P2P
+  async function uploadP2PReceipt(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !p2pResult?.id || !chatFriend || !uid) return;
+    setP2pReceiptUploading(true);
+    const sb = getSupabase() as any;
+    if (!sb) { setP2pReceiptUploading(false); e.target.value = ""; return; }
+    const filePath = `p2p-receipts/${p2pResult.id}.${file.name.split(".").pop() || "jpg"}`;
+    const { error: upErr } = await sb.storage.from("chat-files").upload(filePath, file);
+    if (upErr) { showToast("تعذّر رفع الإيصال"); setP2pReceiptUploading(false); e.target.value = ""; return; }
+    const { data: urlData } = await sb.storage.from("chat-files").createSignedUrl(filePath, 86400);
+    const receiptUrl = urlData?.signedUrl;
+    if (!receiptUrl) { showToast("تعذّر الحصول على رابط"); setP2pReceiptUploading(false); e.target.value = ""; return; }
+    // أرسل للـ API
+    try {
+      const res = await fetch("/api/p2p/upload-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+        body: JSON.stringify({ transaction_id: p2pResult.id, receipt_url: receiptUrl }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("تم رفع الإيصال — بانتظار تأكيد الاستلام");
+        setChatShowP2P(false);
+      } else {
+        showToast(data.error || "تعذّر تحديث المعاملة");
+      }
+    } catch {
+      showToast("خطأ في الاتصال");
+    }
+    setP2pReceiptUploading(false);
+    e.target.value = "";
+  }
+
+  // جلب معاملات P2P المعلّقة لتأكيد الاستلام (أنا = المستلم)
+  async function fetchPendingP2P() {
+    if (!chatFriend || !uid) return;
+    try {
+      const res = await fetch("/api/p2p?status=verifying", {
+        headers: { "x-client-id": uid || "" },
+      });
+      const data = await res.json();
+      if (data.ok) {
+        // فلتر: المعاملات التي المستلم فيها = أنا
+        const mine = (data.transactions || []).filter((t: any) => t.to_user === uid && t.from_user === chatFriend.friend_id);
+        setPendingP2P(mine);
+      }
+    } catch {}
+  }
+
+  // تأكيد استلام P2P
+  async function confirmP2P(transactionId: string, confirmed: boolean) {
+    if (!uid) return;
+    setP2pLoading(true);
+    try {
+      const res = await fetch("/api/p2p/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+        body: JSON.stringify({ transaction_id: transactionId, confirmed }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast(confirmed ? "تم التأكيد — أُنشئ السند ✅" : "تم فتح الخلاف");
+        setShowP2PConfirm(false);
+        setP2pConfirmItem(null);
+        fetchPendingP2P();
+      } else {
+        showToast(data.error || "تعذّر التأكيد");
       }
     } catch {
       showToast("خطأ في الاتصال");
@@ -1470,6 +1551,30 @@ export default function FriendsView() {
           </div>
         </div>
 
+        {/* بانر معاملات P2P بانتظار التأكيد */}
+        {pendingP2P.length > 0 && (
+          <div className="bg-amber-50 border-b border-amber-200 p-2 space-y-2">
+            {pendingP2P.map((t, i) => (
+              <div key={i} className="flex items-center justify-between bg-white rounded-xl p-2.5">
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-amber-700">📄 إيصال بانتظار تأكيدك</div>
+                  <div className="text-xs text-gray-500">{t.amount} ج — {t.method === "vodafone_cash" ? "فودافون كاش" : t.method === "instapay" ? "إنستاباي" : "أخرى"}</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => confirmP2P(t.id, true)} disabled={p2pLoading}
+                    className="bg-green-600 text-white rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-40 flex items-center gap-1">
+                    <Check size={12} /> تم الاستلام
+                  </button>
+                  <button onClick={() => { setP2pConfirmItem(t); setShowP2PConfirm(true); }}
+                    className="bg-red-50 text-red-600 rounded-lg px-3 py-1.5 text-xs font-bold">
+                    <X size={12} /> لم أستلم
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {messages.length === 0 && (
             <div className="text-center text-gray-300 text-sm mt-8">لا توجد رسائل بعد</div>
@@ -1783,7 +1888,14 @@ export default function FriendsView() {
                       <li>انتظر تأكيد {chatFriend.friend_name}</li>
                     </ol>
                   </div>
-                  <button onClick={() => setChatShowP2P(false)} className="w-full bg-violet-600 text-white rounded-2xl py-3 font-bold">تم</button>
+                  {/* رفع إيصال التحويل */}
+                  <input type="file" accept="image/*" onChange={uploadP2PReceipt} className="hidden" ref={receiptInputRef} />
+                  <button onClick={() => receiptInputRef?.current?.click()} disabled={p2pReceiptUploading}
+                    className="w-full bg-green-600 text-white rounded-2xl py-3 font-bold disabled:opacity-40 flex items-center justify-center gap-2">
+                    {p2pReceiptUploading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+                    ارفع إيصال التحويل
+                  </button>
+                  <button onClick={() => setChatShowP2P(false)} className="w-full text-xs text-gray-400">أغلق</button>
                 </div>
               )}
             </div>
