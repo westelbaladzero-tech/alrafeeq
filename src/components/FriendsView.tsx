@@ -1211,7 +1211,7 @@ export default function FriendsView() {
     setFriends(friendList);
     friendsRef.current = friendList;
     // أرسل إجمالي الرسائل غير المقروءة للتبويب
-    const totalUnread = friendList.reduce((s, f) => s + f.unread_count, 0);
+    const totalUnread = friendList.reduce((s, f) => s + f.unread_count, 0) + pendingDebts.length + pendingSetts.length;
     window.dispatchEvent(new CustomEvent("friends-unread-update", { detail: totalUnread }));
   }
 
