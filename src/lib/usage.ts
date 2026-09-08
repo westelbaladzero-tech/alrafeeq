@@ -1,7 +1,7 @@
 import { getAdminClient } from "./supabase-server";
 
 export type ServiceName = "gemini" | "groq" | "magic_link";
-export type EndpointName = "mic-test" | "receipt-test" | "chat" | "login" | "register" | "recover";
+export type EndpointName = "mic-test" | "receipt-test" | "chat" | "login" | "register" | "recover" | "image-text" | "transcribe" | "translate" | "tts" | "magic-link";
 
 export async function trackUsage(
   service: ServiceName,
