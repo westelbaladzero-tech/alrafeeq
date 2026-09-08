@@ -2530,13 +2530,8 @@ export default function FriendsView() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <button onClick={() => { openChat(selectedFriend); setTimeout(() => setChatShowDebt(true), 300); }}
-              className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
-              <HandCoins size={22} className="text-[var(--accent)]" />
-              <span className="text-xs font-bold text-[var(--accent-dark)]">ليّ عنده</span>
-            </button>
-            <button onClick={() => { openChat(selectedFriend); setTimeout(() => setChatShowSettle(true), 300); }}
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <button onClick={() => { openChat(selectedFriend); setTimeout(() => { setUnifiedCat("debt"); setUnifiedMethod("cash"); setChatShowUnified(true); }, 300); }}
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
               <Banknote size={22} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent-dark)]">تسوية</span>
