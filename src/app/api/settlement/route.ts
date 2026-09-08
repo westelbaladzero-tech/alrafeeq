@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
-  const { from_user, to_user, friendship_id, amount, description, status } = await req.json();
+  const { from_user, to_user, friendship_id, amount, description, linked_debt_id, status } = await req.json();
   
   if (!from_user || !to_user || !friendship_id || !amount) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     friendship_id,
     amount: amt.value,
     description: description ? sanitizeText(description, 200) : null,
+    linked_debt_id: linked_debt_id || null,
     status: status || "pending",
   }).select("id").single();
 

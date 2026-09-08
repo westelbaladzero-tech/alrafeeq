@@ -1158,6 +1158,7 @@ export default function FriendsView() {
           friendship_id: chatFriend.friendship_id,
           amount: amt,
           description: (settleCategory === "debt" ? "دين" : settleCategory === "installment" ? "قسط" : "جمعية") + (settleDesc ? " — " + settleDesc : ""),
+          linked_debt_id: p2pSelectedItem?.id || null,
           status: "pending",
         }),
       });
@@ -1598,18 +1599,27 @@ export default function FriendsView() {
               .select("from_user, to_user, amount, friendship_id, description")
               .eq("id", pendingAction.id).maybeSingle();
             if (sett) {
-              // من يدفع لمن: from_user (المدين) → to_user (الدائن)
-              // ابحث عن دين أقساط حيث الدائن = to_user والمدين = from_user
-              const { data: debts } = await sb2.from("debt_requests")
-                .select("id, paid_installments, total_installments, installment_amount")
-                .eq("creditor", sett.to_user)
-                .eq("debtor", sett.from_user)
-                .eq("is_installment", true)
-                .eq("status", "confirmed")
-                .order("created_at", { ascending: false });
-              if (debts && debts.length > 0) {
-                // لو مبلغ التسوية = قسط واحد ← زيد بنسبة قسط واحد
-                const debt = debts[0];
+              // ابحث عن الدين المرتبط مباشرة، أو أي دين أقساط مطابق
+              let debt = null;
+              const { data: settFull } = await sb2.from("settlements")
+                .select("linked_debt_id").eq("id", pendingAction.id).maybeSingle();
+              if (settFull?.linked_debt_id) {
+                const { data: linked } = await sb2.from("debt_requests")
+                  .select("id, paid_installments, total_installments, installment_amount")
+                  .eq("id", settFull.linked_debt_id).maybeSingle();
+                debt = linked;
+              }
+              if (!debt) {
+                const { data: debts } = await sb2.from("debt_requests")
+                  .select("id, paid_installments, total_installments, installment_amount")
+                  .eq("creditor", sett.to_user)
+                  .eq("debtor", sett.from_user)
+                  .eq("is_installment", true)
+                  .eq("status", "confirmed")
+                  .order("created_at", { ascending: false });
+                debt = debts && debts.length > 0 ? debts[0] : null;
+              }
+              if (debt) {
                 const total = debt.total_installments || 0;
                 const currentPaid = debt.paid_installments || 0;
                 if (currentPaid < total) {
