@@ -6,6 +6,7 @@ import PaymentMethodsModal from "./PaymentMethodsModal";
 import QRCode, { downloadQR } from "./QRCode";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
+import { unlockPrivateKey, hasEncryptedKey } from "@/lib/e2e-key-manager";
 
 interface Friend {
   friendship_id: string;
@@ -595,7 +596,13 @@ export default function FriendsView() {
   // المفتاح الخاص: محلي (IndexedDB) + نسخة مشفّرة بالـ PIN سحابياً
   async function initE2EKeys(userId: string) {
     try {
-      const priv = await getPrivateKey();
+      // ─── حاول فتح المفتاح الخاص بالـ PIN ───
+      const pin = sessionStorage.getItem("alrafeeq-pin");
+      if (pin) {
+        await unlockPrivateKey(pin);
+        sessionStorage.removeItem("alrafeeq-pin"); // امحُه فوراً بعد الاستخدام
+      }
+      const priv = await getPrivateKey(); // من الذاكرة الآن
       const sb = getSupabase() as any;
       if (!sb) return;
 
@@ -603,18 +610,18 @@ export default function FriendsView() {
         .select("pubkey, encrypted_privkey, email").eq("id", userId).maybeSingle();
 
       if (priv) {
-        // ─── عنده مفتاح خاص محلياً ───
+        // ─── المفتاح مفتوح في الذاكرة ───
         setMyPrivKey(priv);
         if (profile?.pubkey) {
           setMyPubKey(profile.pubkey);
         } else {
           // المفتاح العام غير موجود سحابياً ← ولّد جديد
-          const pub = await generateKeyPair();
+          // ولّد مفتاح جديد مشفّر بالـ PIN
+          const regPin = sessionStorage.getItem("alrafeeq-pin") || "0000";
+          const pub = await generateKeyPair(regPin);
           const newPriv = await getPrivateKey();
           setMyPrivKey(newPriv);
           setMyPubKey(pub);
-          // ارفع المفتاح العام + نسخة مشفّرة من الخاص
-          // (لا نعرف PIN هنا، نرفع المفتاح العام فقط)
           await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
         }
         setE2eReady(true);
@@ -624,13 +631,14 @@ export default function FriendsView() {
         setShowKeyRecovery(true);
       } else {
         // ─── لا مفتاح محلي ولا سحابي ← ولّد جديد ───
-        const pub = await generateKeyPair();
+        // ولّد مفتاح جديد مشفّر بالـ PIN
+        const regPin = sessionStorage.getItem("alrafeeq-pin") || "0000";
+        const pub = await generateKeyPair(regPin);
         const newPriv = await getPrivateKey();
         setMyPrivKey(newPriv);
         setMyPubKey(pub);
         await sb.from("profiles").update({ pubkey: pub }).eq("id", userId);
         setE2eReady(true);
-        // النسخة المشفّرة بالـ PIN تُرفع لاحقاً عند أول عملية PIN
       }
     } catch {
       setE2eReady(false);

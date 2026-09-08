@@ -83,6 +83,8 @@ function CompleteInner() {
         }
       }
 
+      // خزّن PIN مؤقتاً لفك/إنشاء المفتاح الخاص عند تحميل التطبيق
+      if (pin) sessionStorage.setItem("alrafeeq-pin", pin);
       setStatus("done");
       setTimeout(() => { window.location.href = "/"; }, 1500);
     } catch {

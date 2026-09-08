@@ -1,11 +1,15 @@
 // ─── تشفير الرسائل من طرف لطرف (E2EE) ───
 // يستخدم Web Crypto API: ECDH للمفاتيح + AES-GCM للتشفير
+// المفتاح الخاص مشفّر بـ PIN في IndexedDB — يُفك بالذاكرة فقط
 
-const KEY_DB = "alrafeeq-keys";
-const PRIV_KEY_STORE = "alrafeeq-priv-key";
+import {
+  setupEncryptedPrivateKey,
+  getActivePrivateKey,
+  hasEncryptedKey,
+} from "./e2e-key-manager";
 
-// ─── توليد زوج مفاتيح (عام + خاص) ───
-export async function generateKeyPair() {
+// ─── توليد زوج مفاتيح (عام + خاص) + تشفير المحلي بالـ PIN ───
+export async function generateKeyPair(pin: string) {
   const pair = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
     true,
@@ -14,62 +18,16 @@ export async function generateKeyPair() {
   // صدّر المفتاح العام بصيغة base64
   const pubRaw = await crypto.subtle.exportKey("raw", pair.publicKey);
   const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubRaw)));
-  // خزّن المفتاح الخاص في IndexedDB
+  // صدّر المفتاح الخاص ثم شفّره بالـ PIN قبل التخزين
   const privRaw = await crypto.subtle.exportKey("pkcs8", pair.privateKey);
-  await storePrivateKey(privRaw);
+  await setupEncryptedPrivateKey(privRaw, pin);
   return pubB64;
 }
 
-// ─── خزّن المفتاح الخاص في IndexedDB ───
-async function storePrivateKey(key: ArrayBuffer) {
-  return new Promise<void>((resolve, reject) => {
-    const req = indexedDB.open(KEY_DB, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(PRIV_KEY_STORE)) {
-        db.createObjectStore(PRIV_KEY_STORE);
-      }
-    };
-    req.onsuccess = () => {
-      const db = req.result;
-      const tx = db.transaction(PRIV_KEY_STORE, "readwrite");
-      tx.objectStore(PRIV_KEY_STORE).put(key, "priv");
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
-
-// ─── اقرأ المفتاح الخاص من IndexedDB ───
+// ─── احصل على المفتاح الخاص النشط من الذاكرة ───
+// المفتاح يجب أن يكون مفتوحاً بـ PIN أولاً (unlockPrivateKey)
 export async function getPrivateKey(): Promise<CryptoKey | null> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(KEY_DB, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(PRIV_KEY_STORE)) {
-        db.createObjectStore(PRIV_KEY_STORE);
-      }
-    };
-    req.onsuccess = async () => {
-      const db = req.result;
-      const tx = db.transaction(PRIV_KEY_STORE, "readonly");
-      const getReq = tx.objectStore(PRIV_KEY_STORE).get("priv");
-      getReq.onsuccess = async () => {
-        if (!getReq.result) { resolve(null); return; }
-        try {
-          const key = await crypto.subtle.importKey(
-            "pkcs8", getReq.result,
-            { name: "ECDH", namedCurve: "P-256" },
-            false, ["deriveKey", "deriveBits"]
-          );
-          resolve(key);
-        } catch { resolve(null); }
-      };
-      getReq.onerror = () => reject(getReq.error);
-    };
-    req.onerror = () => reject(req.error);
-  });
+  return getActivePrivateKey();
 }
 
 // ─── استورد مفتاح عام من base64 ───

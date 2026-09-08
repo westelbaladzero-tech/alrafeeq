@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { getUserIdSync } from "@/lib/client-id";
 import { KEYS } from "@/lib/keys";
+import { lockPrivateKey } from "@/lib/e2e-key-manager";
 import Splash from "./Splash";
 
 const IDLE_LIMIT = 10 * 60 * 1000; // 10 دقائق خمول → خروج تلقائي
@@ -27,6 +28,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       const idle = Date.now() - lastActivity.current;
       if (idle > IDLE_LIMIT && authed) {
         // خروج تلقائي
+        lockPrivateKey(); // ← امحُ المفتاح الخاص من الذاكرة
         const sb = getSupabase();
         if (sb) sb.auth.signOut();
         if (typeof window !== "undefined") {
