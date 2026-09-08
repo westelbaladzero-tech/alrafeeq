@@ -3,6 +3,7 @@ import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimit, getClientId } from "@/lib/rate-limit";
 import { getUserIdSync } from "@/lib/client-id";
 import { sanitizeText } from "@/lib/validation";
+import { logFinancialEvent } from "@/lib/audit-log";
 
 // POST /api/p2p/dispute — فتح خلاف
 export async function POST(req: NextRequest) {
@@ -44,10 +45,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "المعاملة مكتملة أو ملغاة" }, { status: 400 });
   }
 
+  // 48h deadline check
+  const { data: fullTxn } = await admin.from("p2p_transactions")
+    .select("settled_at").eq("id", transaction_id).single();
+  if (fullTxn?.settled_at) {
+    const hrs = (Date.now() - new Date(fullTxn.settled_at).getTime()) / 3600000;
+    if (hrs > 48) {
+      return NextResponse.json({ error: "انتهت مهلة فتح نزاع (48 ساعة)" }, { status: 400 });
+    }
+  }
+
   const { error } = await admin.from("p2p_transactions")
     .update({
       status: "disputed",
       dispute_reason: sanitizeText(reason, 500),
+      dispute_deadline: new Date(Date.now() + 7 * 24 * 3600000).toISOString(),
     })
     .eq("id", transaction_id);
 

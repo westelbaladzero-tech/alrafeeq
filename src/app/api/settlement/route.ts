@@ -3,6 +3,7 @@ import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimit, getClientId } from "@/lib/rate-limit";
 import { getUserIdSync } from "@/lib/client-id";
 import { validateAmount, sanitizeText } from "@/lib/validation";
+import { logFinancialEvent } from "@/lib/audit-log";
 
 export async function POST(req: NextRequest) {
   // ─── Rate limiting: 10 طلبات/دقيقة ───
@@ -55,6 +56,17 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: "تعذّر إرسال التسوية" }, { status: 500 });
   }
+
+  await logFinancialEvent({
+    eventType: "settlement_created",
+    actorId: userId,
+    targetUserId: to_user,
+    entityType: "settlement",
+    entityId: data.id,
+    amount: amt.value,
+    metadata: { method, debt_request_id },
+    req: req as unknown as Request,
+  });
 
   return NextResponse.json({ ok: true, id: data?.id });
 }
