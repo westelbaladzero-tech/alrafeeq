@@ -766,7 +766,7 @@ export default function FriendsView() {
     window.speechSynthesis.speak(utter);
   }
 
-  // فتح نافذة P2P — يجلب وسائل دفع الصديق
+  // فتح نافذة P2P — يجلب وسائل دفع الصديق + وسائلي أنا (للتطابق)
   async function openP2P() {
     if (!chatFriend) return;
     setChatShowP2P(true);
@@ -776,15 +776,22 @@ export default function FriendsView() {
     setP2pResult(null);
     setP2pLoading(true);
     try {
-      const res = await fetch(`/api/payment-methods?friend_id=${chatFriend.friend_id}`, {
+      // اجلب وسائل الصديق
+      const friendRes = await fetch(`/api/payment-methods?friend_id=${chatFriend.friend_id}`, {
         headers: { "x-client-id": uid || "" },
       });
-      const data = await res.json();
-      if (data.ok) {
-        setP2pFriendMethods(data.methods || []);
-      } else {
-        setP2pFriendMethods([]);
-      }
+      const friendData = await friendRes.json();
+      const friendMethods = friendData.ok ? (friendData.methods || []) : [];
+      // اجلب وسائلي أنا
+      const myRes = await fetch("/api/payment-methods", {
+        headers: { "x-client-id": uid || "" },
+      });
+      const myData = await myRes.json();
+      const myMethods = myData.ok ? (myData.methods || []) : [];
+      // اعرض فقط الوسائل المشتركة (نفس النوع لكلا الطرفين)
+      const myMethodTypes = new Set(myMethods.map((m: any) => m.method));
+      const shared = friendMethods.filter((m: any) => myMethodTypes.has(m.method));
+      setP2pFriendMethods(shared);
     } catch {
       setP2pFriendMethods([]);
     }
@@ -1826,8 +1833,9 @@ export default function FriendsView() {
                     <div className="flex items-center justify-center py-8"><Loader2 size={24} className="animate-spin text-violet-500" /></div>
                   ) : p2pFriendMethods.length === 0 ? (
                     <div className="text-center py-6">
-                      <p className="text-sm text-gray-400 mb-3">لم يسجّل صديقك وسائل دفع بعد</p>
-                      <p className="text-xs text-gray-300">اطلب منه تسجيل رقم محفظته في الإعدادات</p>
+                      <p className="text-sm text-gray-400 mb-3">لا وسائل مشتركة بينكما</p>
+                      <p className="text-xs text-gray-300">يجب أن تملكا نفس الوسيلة لتحويل فوري ومجاني</p>
+                      <button onClick={() => setShowPaymentMethods(true)} className="mt-3 text-xs text-violet-600 font-bold">سجّل وسائلك</button>
                     </div>
                   ) : (
                     p2pFriendMethods.map((m, i) => (
