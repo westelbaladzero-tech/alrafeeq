@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, getServerClient } from "@/lib/supabase-server";
 import { parseTransaction } from "@/lib/parser";
 import { trackUsage } from "@/lib/usage";
+import { rateLimit, getClientId } from "@/lib/rate-limit";
 
 const GROQ_KEY = process.env.GROQ_API_KEY;
 
@@ -216,6 +217,13 @@ function extractJson(content: string): any {
 }
 
 export async function POST(req: NextRequest) {
+  // ─── Rate limiting: 20 رسالة/دقيقة ───
+  const clientId = getClientId(req as unknown as Request);
+  const rl = rateLimit("chat:" + clientId, 20, 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
+  }
+
   const { message, accessToken, history } = await req.json();
   if (!message) return NextResponse.json({ error: "رسالة فارغة" }, { status: 400 });
 
