@@ -1622,9 +1622,12 @@ export default function FriendsView() {
                     inc = Math.min(Math.round(Number(sett.amount) / instAmt), total - currentPaid);
                     if (inc < 1) inc = 1;
                   }
-                  await sb2.from("debt_requests")
-                    .update({ paid_installments: currentPaid + inc })
-                    .eq("id", debt.id);
+                  // ─── تحديث ذرّي: اقرأ ثم حدّث بشرط (منع race condition) ───
+                  await sb2.rpc("increment_paid_installments", {
+                    debt_id: debt.id,
+                    inc_count: inc,
+                    max_total: total,
+                  });
                 }
               }
             }

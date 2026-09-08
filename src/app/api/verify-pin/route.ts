@@ -82,7 +82,11 @@ export async function POST(req: NextRequest) {
 
   const pinHash = crypto.scryptSync(pin, userSalt, 64).toString("hex");
 
-  if (pinHash !== profile.pin_hash) {
+  // ─── مقارنة بزمن ثابت لمنع timing attacks ───
+  const inputBuf = Buffer.from(pinHash, "hex");
+  const storedBuf = Buffer.from(profile.pin_hash, "hex");
+  const pinMatch = inputBuf.length === storedBuf.length && crypto.timingSafeEqual(inputBuf, storedBuf);
+  if (!pinMatch) {
     // ─── زيادة عدّاد المحاولات الفاشلة ───
     const attempts = (profile.failed_attempts || 0) + 1;
     const MAX_ATTEMPTS = 5;
