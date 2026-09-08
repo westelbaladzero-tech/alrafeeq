@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { CreditCard, Wallet, X, Plus, Trash2, Loader2, Check, Landmark } from "lucide-react";
 import { getResolvedUserId } from "@/lib/client-id";
+import PayPalGuide from "./PayPalGuide";
 
 interface Method {
   id: string;
@@ -23,6 +24,7 @@ const METHOD_LABELS: Record<string, string> = {
   we_cash: "وي كاش",
   bank_account: "حساب بنكي",
   card: "بطاقة",
+  paypal: "PayPal",
   other: "أخرى",
 };
 
@@ -41,6 +43,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
   const [cardType, setCardType] = useState("visa");
   const [lastFour, setLastFour] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     getResolvedUserId().then(id => {
@@ -74,6 +77,17 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
       if (method === "card") {
         body.card_type = cardType;
         body.last_four = lastFour;
+      }
+      if (method === "paypal") {
+        // ولّد رابط paypal.me تلقائياً
+        const id = identifier.trim();
+        if (id.includes("@")) {
+          // بريد إلكتروني ← استخدمه كمعرف
+          body.payment_link = "https://paypal.me/" + id.split("@")[0];
+        } else {
+          // اسم مستخدم ← ادمج مع paypal.me
+          body.payment_link = "https://paypal.me/" + id.replace(/^https?:\/\/paypal\.me\//, "");
+        }
       }
       const res = await fetch("/api/payment-methods", {
         method: "POST",
@@ -162,6 +176,10 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
               className="w-full flex items-center justify-center gap-2 bg-violet-50 text-violet-600 rounded-2xl py-3 font-bold text-sm">
               <Plus size={18} /> أضف وسيلة دفع
             </button>
+          <button onClick={() => setShowGuide(true)}
+            className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-600 rounded-2xl py-2.5 font-bold text-xs">
+              <Globe size={16} /> كيف أنشئ حساب PayPal مجاناً؟
+            </button>
           )}
           {showAdd && (
             <div className="bg-violet-50/50 rounded-2xl p-4 space-y-3">
@@ -176,6 +194,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
                     <option value="we_cash">وي كاش</option>
                   </optgroup>
                   <option value="instapay">إنستاباي</option>
+                  <option value="paypal">PayPal (دولي)</option>
                   <option value="bank_account">حساب بنكي</option>
                   <option value="card">بطاقة (آخر 4 أرقام)</option>
                 </select>
@@ -183,11 +202,19 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
               {needsIdentifier && (
                 <div>
                   <label className="text-xs text-gray-500 block mb-1.5">
-                    {method === "instapay" ? "IPA (name@instapay)" : "رقم الهاتف (01xxxxxxxxx)"}
+                    {method === "instapay" ? "IPA (name@instapay)" :
+                     method === "paypal" ? "بريد PayPal أو paypal.me/username" :
+                     "رقم الهاتف (01xxxxxxxxx)"}
                   </label>
                   <input type="text" value={identifier} onChange={e => setIdentifier(e.target.value)}
-                    placeholder={method === "instapay" ? "name@instapay" : "01xxxxxxxxx"} dir="ltr"
+                    placeholder={method === "instapay" ? "name@instapay" :
+                      method === "paypal" ? "name@example.com أو myname" : "01xxxxxxxxx"} dir="ltr"
                     className="w-full bg-white rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-100" />
+                  {method === "paypal" && (
+                    <p className="text-[10px] text-blue-600 mt-1 bg-blue-50 rounded-lg px-2 py-1">
+                      💡 يتم توليد رابط paypal.me تلقائياً من اسم المستخدم
+                    </p>
+                  )}
                 </div>
               )}
               {method === "bank_account" && (
@@ -253,6 +280,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
           )}
         </div>
       </div>
+      {showGuide && <PayPalGuide onClose={() => setShowGuide(false)} />}
     </div>
   );
 }
