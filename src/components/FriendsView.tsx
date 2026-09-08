@@ -1593,32 +1593,16 @@ export default function FriendsView() {
             .update({ status, confirmed_at: new Date().toISOString() })
             .eq("id", pendingAction.id);
 
-          // لو تأكيد تسوية ← حدّث paid_installments لو الدين أقساط
+          // لو تأكيد تسوية ← حدّث paid_installments للدين المختار فقط
           if (pendingAction.type === "settlement" && pendingAction.accept) {
             const { data: sett } = await sb2.from("settlements")
-              .select("from_user, to_user, amount, friendship_id, description")
+              .select("from_user, to_user, amount, friendship_id, description, linked_debt_id")
               .eq("id", pendingAction.id).maybeSingle();
-            if (sett) {
-              // ابحث عن الدين المرتبط مباشرة، أو أي دين أقساط مطابق
-              let debt = null;
-              const { data: settFull } = await sb2.from("settlements")
-                .select("linked_debt_id").eq("id", pendingAction.id).maybeSingle();
-              if (settFull?.linked_debt_id) {
-                const { data: linked } = await sb2.from("debt_requests")
-                  .select("id, paid_installments, total_installments, installment_amount")
-                  .eq("id", settFull.linked_debt_id).maybeSingle();
-                debt = linked;
-              }
-              if (!debt) {
-                const { data: debts } = await sb2.from("debt_requests")
-                  .select("id, paid_installments, total_installments, installment_amount")
-                  .eq("creditor", sett.to_user)
-                  .eq("debtor", sett.from_user)
-                  .eq("is_installment", true)
-                  .eq("status", "confirmed")
-                  .order("created_at", { ascending: false });
-                debt = debts && debts.length > 0 ? debts[0] : null;
-              }
+            if (sett?.linked_debt_id) {
+              // استخدم الدين المختار مباشرة — لا حاجة للمطابقة
+              const { data: debt } = await sb2.from("debt_requests")
+                .select("id, paid_installments, total_installments, installment_amount")
+                .eq("id", sett.linked_debt_id).maybeSingle();
               if (debt) {
                 const total = debt.total_installments || 0;
                 const currentPaid = debt.paid_installments || 0;
