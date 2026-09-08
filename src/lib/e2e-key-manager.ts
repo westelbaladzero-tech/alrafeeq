@@ -30,7 +30,7 @@ async function deriveKEK(pin: string, salt: Uint8Array): Promise<CryptoKey> {
     "PBKDF2", false, ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations: 600000, hash: "SHA-256" },
     pinKey,
     { name: "AES-GCM", length: 256 },
     false, // غير قابل للاستخراج
