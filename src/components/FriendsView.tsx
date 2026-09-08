@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { UserPlus, Users, ArrowRight, ArrowLeft, Check, X, Wallet, HandCoins, Banknote, Lock, MessageCircle, Send, Paperclip, Image as ImageIcon, FileText, Download, Volume2, Mic, MicOff, Loader2, ScanText, CreditCard } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import PaymentMethodsModal from "./PaymentMethodsModal";
+import QRCode, { downloadQR } from "./QRCode";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
 
@@ -99,7 +100,7 @@ export default function FriendsView() {
   const [chatShowDebt, setChatShowDebt] = useState(false);
   const [chatShowSettle, setChatShowSettle] = useState(false);
   const [chatShowP2P, setChatShowP2P] = useState(false);
-  const [p2pStep, setP2pStep] = useState<"category" | "items" | "select" | "amount" | "done">("category");
+  const [p2pStep, setP2pStep] = useState<"category" | "items" | "select" | "qr" | "amount" | "done">("category");
   const [p2pCategory, setP2pCategory] = useState<any>(null);
   const [p2pItems, setP2pItems] = useState<any[]>([]);
   const [p2pSelectedItem, setP2pSelectedItem] = useState<any>(null);
@@ -2064,7 +2065,7 @@ export default function FriendsView() {
                     </div>
                   ) : (
                     p2pFriendMethods.map((m, i) => (
-                      <button key={i} onClick={() => { setP2pSelectedMethod(m); setP2pStep("amount"); }}
+                      <button key={i} onClick={() => { setP2pSelectedMethod(m); setP2pStep("qr"); }}
                         className="w-full flex items-center gap-3 bg-gray-50 rounded-2xl p-3 hover:bg-violet-50 transition text-right">
                         <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
                           <Wallet size={16} className="text-violet-600" />
@@ -2077,6 +2078,48 @@ export default function FriendsView() {
                       </button>
                     ))
                   )}
+                </div>
+              )}
+
+              {/* الخطوة QR: اعرض الكود */}
+              {p2pStep === "qr" && p2pSelectedMethod && (
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="text-sm font-bold mb-1">
+                      {p2pSelectedMethod.method === "vodafone_cash" ? "فودافون كاش" :
+                       p2pSelectedMethod.method === "instapay" ? "إنستاباي" :
+                       p2pSelectedMethod.method === "etisalat_cash" ? "اتصالات كاش" :
+                       p2pSelectedMethod.method === "orange_cash" ? "أورانج كاش" :
+                       p2pSelectedMethod.method === "we_cash" ? "وي كاش" :
+                       p2pSelectedMethod.method === "bank_account" ? "حساب بنكي" : "بطاقة"}
+                    </div>
+                    <p className="text-xs text-gray-400">امسح الكود أو انسخ المعرف وحوّل</p>
+                  </div>
+                  <div className="flex justify-center bg-white p-3 rounded-2xl border border-gray-100">
+                    <QRCode value={p2pSelectedMethod.payment_link || p2pSelectedMethod.identifier || p2pSelectedMethod.iban || ""} size={200} />
+                  </div>
+                  <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-2">
+                    <code className="flex-1 text-xs text-gray-600 truncate" dir="ltr">
+                      {p2pSelectedMethod.identifier || p2pSelectedMethod.iban || ""}
+                    </code>
+                    <button onClick={() => {
+                      navigator.clipboard.writeText(p2pSelectedMethod.identifier || p2pSelectedMethod.iban || "");
+                      showToast("تم النسخ");
+                    }}
+                      className="shrink-0 text-xs text-violet-600 font-bold px-2 py-1 bg-violet-50 rounded-lg">
+                      نسخ
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => downloadQR(p2pSelectedMethod.payment_link || p2pSelectedMethod.identifier || "", "payment-qr")}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-gray-100 text-gray-600 rounded-xl py-2.5 text-xs font-bold">
+                      <Download size={14} /> حمل QR
+                    </button>
+                    <button onClick={() => setP2pStep("amount")}
+                      className="flex-1 flex items-center justify-center gap-1.5 bg-violet-600 text-white rounded-xl py-2.5 text-xs font-bold">
+                      متابعة
+                    </button>
+                  </div>
                 </div>
               )}
 

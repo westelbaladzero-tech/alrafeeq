@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   const userId = getUserIdSync();
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
-  const { method, identifier, display_name, is_primary, bank_name, iban, card_type, last_four, card_full } = await req.json();
+  const { method, identifier, display_name, is_primary, bank_name, iban, card_type, last_four, card_full, payment_link } = await req.json();
 
   if (!method) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
   if (iban) insertData.iban = sanitizeText(iban, 34);
   if (card_type) insertData.card_type = card_type;
   if (last_four) insertData.last_four = last_four;
+  if (payment_link) insertData.payment_link = sanitizeText(payment_link, 200);
 
   const { data, error } = await admin.from("payment_methods").insert(insertData).select("id").single();
 
