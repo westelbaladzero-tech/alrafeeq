@@ -79,11 +79,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 403 });
   }
 
-  // احسب رقم السند التالي لهذه الصداقة
-  const { count } = await admin.from("sanad_records")
-    .select("*", { count: "exact", head: true })
-    .eq("friendship_id", friendship_id);
-  const sanadNumber = (count || 0) + 1;
+  // احسب رقم السند التالي ذرّياً (RPC يمنع race condition)
+  const { data: rpcResult } = await admin.rpc("get_next_sanad_number", { f_ship_id: friendship_id });
+  const sanadNumber = rpcResult || 1;
 
   const { data, error } = await admin.from("sanad_records").insert({
     friendship_id,

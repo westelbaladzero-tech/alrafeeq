@@ -22,6 +22,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
   }
 
+  // ─── تحقق من صحة URL الإيصال ───
+  if (receipt_url.length > 2048) {
+    return NextResponse.json({ error: "رابط الإيصال طويل جداً" }, { status: 400 });
+  }
+  try {
+    const parsed = new URL(receipt_url);
+    if (!["https:", "data:"].includes(parsed.protocol)) {
+      return NextResponse.json({ error: "رابط غير آمن" }, { status: 400 });
+    }
+  } catch {
+    return NextResponse.json({ error: "رابط غير صحيح" }, { status: 400 });
+  }
+
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
