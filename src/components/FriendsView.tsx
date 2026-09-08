@@ -1599,7 +1599,35 @@ export default function FriendsView() {
                 }
               }
             }
-            // أنشئ سند توثيقي في الشات
+            // أنشئ سند هرمي موثّق + رسالة في الشات
+            if (sett.friendship_id) {
+              const cat = sett.description && sett.description.includes("قسط") ? "installment" :
+                          sett.description && sett.description.includes("جمعية") ? "gam3eya" : "debt";
+              try {
+                await fetch("/api/sanad", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+                  body: JSON.stringify({
+                    friendship_id: sett.friendship_id,
+                    type: "settlement",
+                    category: cat,
+                    to_user: sett.to_user,
+                    amount: sett.amount,
+                    description: sett.description,
+                    linked_settlement_id: pendingAction.id,
+                    status: "confirmed",
+                  }),
+                });
+              } catch {}
+              await sendSystemMessage(
+                sett.friendship_id,
+                "📄 سند " + new Date().toLocaleDateString("ar-EG") + "\n" +
+                "الفئة: " + (cat === "installment" ? "قسط" : cat === "gam3eya" ? "جمعية" : "دين") + "\n" +
+                "المبلغ: " + sett.amount + " جنيه\n" +
+                (sett.description ? ("الوصف: " + sett.description + "\n") : "") +
+                "الحالة: نهائي موثّق ✅"
+              );
+            }
             if (sett.friendship_id) {
               await sendSystemMessage(
                 sett.friendship_id,
