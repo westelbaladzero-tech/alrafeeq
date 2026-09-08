@@ -63,29 +63,52 @@ export async function POST(req: NextRequest) {
   const userId = getUserIdSync();
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
-  const { method, identifier, display_name, is_primary } = await req.json();
+  const { method, identifier, display_name, is_primary, bank_name, iban, card_type, last_four, card_full } = await req.json();
 
-  if (!method || !identifier) {
+  if (!method) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
   }
 
-  if (!["vodafone_cash", "instapay", "other"].includes(method)) {
+  const validMethods = ["vodafone_cash", "instapay", "etisalat_cash", "orange_cash", "we_cash", "bank_account", "card", "other"];
+  if (!validMethods.includes(method)) {
     return NextResponse.json({ error: "وسيلة غير مدعومة" }, { status: 400 });
   }
 
-  // تحقق من تنسيق المعرف
-  if (method === "vodafone_cash" && !/^01[0-9]{9}$/.test(identifier)) {
-    return NextResponse.json({ error: "رقم فودافون غير صحيح (01xxxxxxxxx)" }, { status: 400 });
+  // امن: لا نقبل الرقم الكامل للبطاقة أو CVV
+  if (card_full) {
+    return NextResponse.json({ error: "لا ترسل الرقم الكامل — فقط آخر 4 أرقام" }, { status: 400 });
   }
 
-  if (method === "instapay" && !identifier.includes("@")) {
+  // تحقق حسب النوع
+  const walletMethods = ["vodafone_cash", "etisalat_cash", "orange_cash", "we_cash"];
+  if (walletMethods.includes(method) && identifier && !/^01[0-9]{9}$/.test(identifier)) {
+    return NextResponse.json({ error: "رقم محفظة غير صحيح (01xxxxxxxxx)" }, { status: 400 });
+  }
+
+  if (method === "instapay" && identifier && !identifier.includes("@")) {
     return NextResponse.json({ error: "IPA يجب أن يحتوي على @" }, { status: 400 });
+  }
+
+  if (method === "bank_account" && !bank_name) {
+    return NextResponse.json({ error: "اسم البنك مطلوب" }, { status: 400 });
+  }
+
+  if (method === "card") {
+    if (!card_type || !last_four) {
+      return NextResponse.json({ error: "نوع البطاقة وآخر 4 أرقام مطلوبان" }, { status: 400 });
+    }
+    if (!/^\d{4}$/.test(last_four)) {
+      return NextResponse.json({ error: "آخر 4 أرقام فقط" }, { status: 400 });
+    }
+    if (!["visa", "mastercard"].includes(card_type)) {
+      return NextResponse.json({ error: "نوع بطاقة غير مدعوم" }, { status: 400 });
+    }
   }
 
   const admin = getAdminClient();
   if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
-  // لو is_primary ← ألغِ الـ primary السابق
+  // لو is_primary ← الغِ الـ primary السابق
   if (is_primary) {
     await admin.from("payment_methods")
       .update({ is_primary: false })
@@ -93,13 +116,19 @@ export async function POST(req: NextRequest) {
       .eq("is_primary", true);
   }
 
-  const { data, error } = await admin.from("payment_methods").insert({
+  const insertData: Record<string, unknown> = {
     user_id: userId,
     method,
-    identifier: sanitizeText(identifier, 50),
+    identifier: identifier ? sanitizeText(identifier, 50) : null,
     display_name: display_name ? sanitizeText(display_name, 50) : null,
     is_primary: !!is_primary,
-  }).select("id").single();
+  };
+  if (bank_name) insertData.bank_name = sanitizeText(bank_name, 50);
+  if (iban) insertData.iban = sanitizeText(iban, 34);
+  if (card_type) insertData.card_type = card_type;
+  if (last_four) insertData.last_four = last_four;
+
+  const { data, error } = await admin.from("payment_methods").insert(insertData).select("id").single();
 
   if (error) {
     if (error.code === "23505") {
