@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     // تحقق من الصداقة
     const { data: friendship } = await admin.from("friendships")
       .select("id")
-      .or(`and(user_id.eq.${userId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${userId})`)
+      .or(`and(user_a.eq.${userId},user_b.eq.${friendId}),and(user_a.eq.${friendId},user_b.eq.${userId})`)
       .limit(1);
 
     if (!friendship || friendship.length === 0) {
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data, error } = await admin.from("payment_methods")
-      .select("id, method, identifier, display_name, is_primary")
+      .select("id, method, identifier, display_name, is_primary, payment_link, bank_name, iban, card_type, last_four")
       .eq("user_id", friendId)
       .eq("is_active", true)
       .order("is_primary", { ascending: false });
