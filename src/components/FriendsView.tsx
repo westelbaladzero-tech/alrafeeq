@@ -45,6 +45,7 @@ interface PendingSettlement {
   you_are: "sender" | "receiver";
   created_at: string;
   friend_id: string;
+  status?: string;
 }
 
 export default function FriendsView() {
