@@ -19,7 +19,7 @@ export default function Splash() {
           </div>
           <div className="text-right">
             <h1 className="text-2xl font-bold text-[var(--accent-dark)]">الرفيق الأمين</h1>
-            <p className="text-xs text-[var(--muted)]">رفيقك في كل مالك</p>
+            <p className="text-xs text-[var(--muted)]">معك في كل شيء</p>
           </div>
         </div>
 
@@ -50,6 +50,11 @@ export default function Splash() {
           className="w-full rounded-2xl bg-[var(--soft)] text-[var(--accent-dark)] py-3.5 font-bold">
           أنشئ حساب جديد
         </button>
+
+        {/* عبارة اليقين */}
+        <p className="text-center text-xs text-[var(--muted)] mt-6 font-medium">
+          قُلْ هُوَ الرَّحْمَٰنُ آمَنَّا بِهِ وَعَلَيْهِ تَوَكَّلْنَا
+        </p>
       </div>
     </main>
   );
