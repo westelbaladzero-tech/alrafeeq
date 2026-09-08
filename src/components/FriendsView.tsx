@@ -1591,9 +1591,15 @@ export default function FriendsView() {
         if (sb2) {
           const table = pendingAction.type === "debt" ? "debt_requests" : "settlements";
           const status = pendingAction.accept ? "confirmed" : "rejected";
-          await sb2.from(table)
+          const { error: updErr } = await sb2.from(table)
             .update({ status, confirmed_at: new Date().toISOString() })
             .eq("id", pendingAction.id);
+          if (updErr) {
+            console.error("confirm update error:", updErr);
+            setPinErr("تعذّر التحديث — حاول مرة أخرى");
+            setPinVerifying(false);
+            return;
+          }
 
           // لو تأكيد تسوية ← حدّث paid_installments للدين المختار فقط
           if (pendingAction.type === "settlement" && pendingAction.accept) {
@@ -1627,7 +1633,7 @@ export default function FriendsView() {
               const cat = sett.description && sett.description.includes("قسط") ? "installment" :
                           sett.description && sett.description.includes("جمعية") ? "gam3eya" : "debt";
               try {
-                await fetch("/api/sanad", {
+                const sanadRes = await fetch("/api/sanad", {
                   method: "POST",
                   headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
                   body: JSON.stringify({
@@ -1641,7 +1647,11 @@ export default function FriendsView() {
                     status: "confirmed",
                   }),
                 });
-              } catch {}
+                if (!sanadRes.ok) {
+                  const sanadErr = await sanadRes.json().catch(() => ({}));
+                  console.error("sanad API error:", sanadErr);
+                }
+              } catch (e) { console.error("sanad fetch error:", e); }
               await sendSystemMessage(
                 sett.friendship_id,
                 "📄 سند " + new Date().toLocaleDateString("ar-EG") + "\n" +
@@ -2496,16 +2506,7 @@ export default function FriendsView() {
                 <div key={d.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-sm font-bold">عليك {d.amount} جنيه</div>
-                    <div className="flex gap-1">
-                      <button onClick={() => respondDebt(d.id, true)}
-                        className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
-                        <Check size={14} /> موافق
-                      </button>
-                      <button onClick={() => respondDebt(d.id, false)}
-                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
-                        <X size={14} /> رفض
-                      </button>
-                    </div>
+                    <span className="text-xs text-amber-600 font-bold">بانتظار موافقتك</span>
                   </div>
                   {d.description && <div className="text-xs text-gray-400">{d.description}</div>}
                   {d.is_installment && d.total_installments && (
@@ -2516,6 +2517,10 @@ export default function FriendsView() {
                   )}
                 </div>
               ))}
+              <button onClick={() => openChat(selectedFriend)}
+                className="w-full py-2 rounded-xl bg-[var(--accent)] text-white text-xs font-bold">
+                افتح الدردشة للتأكيد
+              </button>
             </div>
           )}
 
@@ -2526,19 +2531,14 @@ export default function FriendsView() {
                 <div key={s.id} className="bg-white rounded-2xl p-3 mb-2 border border-[var(--soft)]">
                   <div className="flex items-center justify-between mb-1">
                     <div className="text-sm font-bold">استلمت {s.amount} جنيه</div>
-                    <div className="flex gap-1">
-                      <button onClick={() => respondSettlement(s.id, true)}
-                        className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
-                        <Check size={14} /> أكدت
-                      </button>
-                      <button onClick={() => respondSettlement(s.id, false)}
-                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
-                        <X size={14} /> ما استلمت
-                      </button>
-                    </div>
+                    <span className="text-xs text-amber-600 font-bold">بانتظار تأكيدك</span>
                   </div>
                 </div>
               ))}
+              <button onClick={() => openChat(selectedFriend)}
+                className="w-full py-2 rounded-xl bg-[var(--accent)] text-white text-xs font-bold">
+                افتح الدردشة للتأكيد
+              </button>
             </div>
           )}
 
