@@ -1758,6 +1758,52 @@ export default function FriendsView() {
           </div>
         )}
 
+        {/* بانرات التأكيد داخل الشات */}
+        {chatFriend && pendingDebts.filter((d) => d.friend_id === chatFriend.friend_id && d.you_are === "debtor").length > 0 && (
+          <div className="px-3 pt-2 space-y-2">
+            {pendingDebts.filter((d) => d.friend_id === chatFriend.friend_id && d.you_are === "debtor").map((d) => (
+              <div key={d.id} className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold text-amber-700">📋 طلب دين عليك</div>
+                  <div className="text-xs text-amber-600">{d.amount} جنيه {d.is_installment ? "(أقساط)" : ""}</div>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => respondDebt(d.id, true)}
+                    className="px-3 py-1.5 rounded-lg bg-green-500 text-white text-xs font-bold flex items-center gap-1">
+                    <Check size={14} /> موافق
+                  </button>
+                  <button onClick={() => respondDebt(d.id, false)}
+                    className="px-3 py-1.5 rounded-lg bg-red-100 text-red-500 text-xs font-bold flex items-center gap-1">
+                    <X size={14} /> رفض
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {chatFriend && pendingSetts.filter((s) => s.friend_id === chatFriend.friend_id && s.status === "pending").length > 0 && (
+          <div className="px-3 pt-2 space-y-2">
+            {pendingSetts.filter((s) => s.friend_id === chatFriend.friend_id && s.status === "pending").map((s) => (
+              <div key={s.id} className="bg-blue-50 border border-blue-200 rounded-2xl p-3 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-bold text-blue-700">🔄 طلب تسوية بانتظار تأكيدك</div>
+                  <div className="text-xs text-blue-600">{s.amount} جنيه</div>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => respondSettlement(s.id, true)}
+                    className="px-3 py-1.5 rounded-lg bg-green-500 text-white text-xs font-bold flex items-center gap-1">
+                    <Check size={14} /> تأكيد
+                  </button>
+                  <button onClick={() => respondSettlement(s.id, false)}
+                    className="px-3 py-1.5 rounded-lg bg-red-100 text-red-500 text-xs font-bold flex items-center gap-1">
+                    <X size={14} /> رفض
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {messages.length === 0 && (
             <div className="text-center text-gray-300 text-sm mt-8">لا توجد رسائل بعد</div>
@@ -2403,20 +2449,25 @@ export default function FriendsView() {
           </div>
 
           <div className="grid grid-cols-3 gap-2 mb-4">
-            <button onClick={() => setShowDebt(true)}
+            <button onClick={() => { openChat(selectedFriend); setTimeout(() => setChatShowDebt(true), 300); }}
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
               <HandCoins size={22} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent-dark)]">ليّ عنده</span>
             </button>
-            <button onClick={() => setShowSettle(true)}
+            <button onClick={() => { openChat(selectedFriend); setTimeout(() => setChatShowSettle(true), 300); }}
               className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
               <Banknote size={22} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent-dark)]">تسوية</span>
             </button>
             <button onClick={() => openChat(selectedFriend)}
-              className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)]">
+              className="flex flex-col items-center gap-1 bg-white rounded-2xl p-4 border border-[var(--soft)] relative">
               <MessageCircle size={22} className="text-[var(--accent)]" />
               <span className="text-xs font-bold text-[var(--accent-dark)]">دردشة</span>
+              {selectedFriend && (pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "debtor").length + pendingSetts.filter((s) => s.friend_id === selectedFriend.friend_id && s.status === "pending").length) > 0 && (
+                <span className="absolute top-1 left-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "debtor").length + pendingSetts.filter((s) => s.friend_id === selectedFriend.friend_id && s.status === "pending").length}
+                </span>
+              )}
             </button>
           </div>
 
