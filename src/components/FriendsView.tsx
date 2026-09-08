@@ -71,6 +71,11 @@ export default function FriendsView() {
   const [pendingAction, setPendingAction] = useState<{ type: "debt" | "settlement"; id: string; accept: boolean } | null>(null);
   const [showRelation, setShowRelation] = useState(false);
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
+  const [pendingRelReqs, setPendingRelReqs] = useState<any[]>([]);
+  const [showRelReq, setShowRelReq] = useState(false);
+  const [relReqRole, setRelReqRole] = useState("");
+  const [relReqReason, setRelReqReason] = useState("");
+  const [relReqShip, setRelReqShip] = useState<string | null>(null);
   const [relationType, setRelationType] = useState("");
   const [relationForShip, setRelationForShip] = useState<string | null>(null);
   const [isInstallment, setIsInstallment] = useState(false);
@@ -179,6 +184,7 @@ export default function FriendsView() {
     await loadFriends(userId);
     await loadPendingDebts(userId);
     await loadPendingSettlements(userId);
+    fetchPendingRelReqs();
     setLoading(false);
     // استعد الشات/الصديق المحفوظ مرة واحدة فقط عند التحميل الأول
     if (isInitialLoad) {
@@ -1356,6 +1362,58 @@ export default function FriendsView() {
     return labels[type] || "صديق";
   }
 
+  // جلب طلبات تغيير العلاقة المعلّقة
+  async function fetchPendingRelReqs() {
+    if (!uid) return;
+    try {
+      const res = await fetch("/api/relationship-change", { headers: { "x-client-id": uid } });
+      const data = await res.json();
+      if (data.ok) setPendingRelReqs(data.requests || []);
+    } catch {}
+  }
+
+  // إرسال طلب تغيير علاقة
+  async function sendRelReq() {
+    if (!relReqShip || !relReqRole || !uid) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/relationship-change", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-client-id": uid },
+        body: JSON.stringify({ friendship_id: relReqShip, requested_role: relReqRole, reason: relReqReason }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast("تم إرسال طلب التغيير");
+        setShowRelReq(false);
+        setRelReqRole(""); setRelReqReason(""); setRelReqShip(null);
+      } else {
+        showToast(data.error || "تعذّر الإرسال");
+      }
+    } catch {
+      showToast("خطأ في الاتصال");
+    }
+    setSubmitting(false);
+  }
+
+  // الرد على طلب تغيير علاقة
+  async function respondRelReq(reqId: string, approved: boolean) {
+    if (!uid) return;
+    try {
+      const res = await fetch("/api/relationship-change", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-client-id": uid },
+        body: JSON.stringify({ request_id: reqId, approved }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast(approved ? "تمت الموافقة وتحديث العلاقة" : "تم الرفض");
+        fetchPendingRelReqs();
+        await load();
+      }
+    } catch {}
+  }
+
   // منطق الإقتران التلقائي للعلاقات
   // عند اختيار دور ← يُحدّد دور الطرف الآخر تلقائياً
   function getPairedRole(myRole: string): string {
@@ -2126,6 +2184,39 @@ export default function FriendsView() {
             </button>
           </div>
 
+          {/* طلبات تغيير العلاقة المعلّقة */}
+          {pendingRelReqs.filter((r) => r.friendship_id === selectedFriend.friendship_id).length > 0 && (
+            <div className="mb-4">
+              <h3 className="text-xs text-gray-400 mb-2">طلبات تغيير العلاقة</h3>
+              {pendingRelReqs.filter((r) => r.friendship_id === selectedFriend.friendship_id).map((r) => (
+                <div key={r.id} className="bg-violet-50 rounded-2xl p-3 mb-2 border border-violet-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-sm font-bold text-violet-700">
+                      طلب أن يصبح: {getRelationLabel(r.requested_role)}
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => respondRelReq(r.id, true)}
+                        className="px-3 py-1.5 rounded-lg bg-green-100 text-green-600 text-xs font-bold flex items-center gap-1">
+                        <Check size={14} /> موافق
+                      </button>
+                      <button onClick={() => respondRelReq(r.id, false)}
+                        className="px-3 py-1.5 rounded-lg bg-red-50 text-red-400 text-xs font-bold flex items-center gap-1">
+                        <X size={14} /> رفض
+                      </button>
+                    </div>
+                  </div>
+                  {r.reason && <div className="text-xs text-gray-500">{r.reason}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* زر طلب تغيير علاقة */}
+          <button onClick={() => { setRelReqShip(selectedFriend.friendship_id); setShowRelReq(true); }}
+            className="w-full flex items-center justify-center gap-1.5 bg-violet-50 text-violet-600 rounded-xl py-2.5 text-xs font-bold mb-4">
+            <RefreshCw size={14} /> اطلب تغيير العلاقة
+          </button>
+
           {/* طلبات معلّقة لهذا الصديق */}
           {pendingDebts.filter((d) => d.friend_id === selectedFriend.friend_id && d.you_are === "debtor").length > 0 && (
             <div className="mb-4">
@@ -2420,12 +2511,12 @@ export default function FriendsView() {
               <p className="text-xs text-gray-400 text-center mb-4">النوع الحالي: {getRelationLabel(relationType)}</p>
               <div className="space-y-2">
                 {[
-                  { value: "friend", label: "صديق", emoji: "🤝" },
-                  { value: "employer", label: "صاحب عمل", emoji: "💼" },
-                  { value: "colleague", label: "أعمل مع", emoji: "👥" },
-                  { value: "partner", label: "شريك", emoji: "🤝" },
-                  { value: "client", label: "عميل", emoji: "📋" },
-                  { value: "association", label: "جمعية", emoji: "🔄" },
+                  { value: "friend", label: "صديق", paired: "صديق", emoji: "🤝" },
+                  { value: "employer", label: "مدير", paired: "يعمل معك", emoji: "💼" },
+                  { value: "colleague", label: "أعمل مع", paired: "مديرك", emoji: "👥" },
+                  { value: "partner", label: "شريك", paired: "شريك", emoji: "🤝" },
+                  { value: "client", label: "عميل", paired: "عميل", emoji: "📋" },
+                  { value: "association", label: "جمعية (مدير)", paired: "عضو", emoji: "🔄" },
                 ].map((opt) => (
                   <button key={opt.value} onClick={() => setRelationType(opt.value)}
                     className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
@@ -2653,17 +2744,20 @@ export default function FriendsView() {
             <p className="text-xs text-gray-400 text-center mb-4">ده يساعدنا نفهم حساباتك أحسن</p>
             <div className="space-y-2">
               {[
-                { value: "friend", label: "صديق", emoji: "🤝" },
-                { value: "employer", label: "صاحب عمل", emoji: "💼" },
-                { value: "colleague", label: "أعمل مع", emoji: "👥" },
-                { value: "partner", label: "شريك", emoji: "🤝" },
-                { value: "client", label: "عميل", emoji: "📋" },
-                { value: "association", label: "جمعية", emoji: "🔄" },
+                { value: "friend", label: "صديق", paired: "صديق", emoji: "🤝" },
+                { value: "employer", label: "مدير", paired: "يعمل معك", emoji: "💼" },
+                { value: "colleague", label: "أعمل مع", paired: "مديرك", emoji: "👥" },
+                { value: "partner", label: "شريك", paired: "شريك", emoji: "🤝" },
+                { value: "client", label: "عميل", paired: "عميل", emoji: "📋" },
+                { value: "association", label: "جمعية (مدير)", paired: "عضو", emoji: "🔄" },
               ].map((opt) => (
                 <button key={opt.value} onClick={() => setRelationType(opt.value)}
                   className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
                   <span className="text-xl">{opt.emoji}</span>
-                  <span className="text-sm font-bold">{opt.label}</span>
+                  <div className="flex-1">
+                    <div className="text-sm font-bold">{opt.label}</div>
+                    <div className="text-[10px] text-gray-400">الطرف الآخر: {opt.paired}</div>
+                  </div>
                   {relationType === opt.value && <Check size={16} className="text-[var(--accent)] mr-auto" />}
                 </button>
               ))}
@@ -2736,6 +2830,42 @@ export default function FriendsView() {
         </div>
       )}
 
+      {/* مودال طلب تغيير العلاقة */}
+      {showRelReq && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowRelReq(false)}>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-5 mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-center mb-1">اطلب تغيير العلاقة</h3>
+            <p className="text-xs text-gray-400 text-center mb-4">سيُرسل الطلب للطرف الآخر للموافقة</p>
+            <div className="space-y-2 mb-3">
+              {[
+                { value: "friend", label: "صديق" },
+                { value: "employer", label: "مدير" },
+                { value: "colleague", label: "أعمل مع" },
+                { value: "partner", label: "شريك" },
+                { value: "client", label: "عميل" },
+              ].map((opt) => (
+                <button key={opt.value} onClick={() => setRelReqRole(opt.value)}
+                  className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relReqRole === opt.value ? "border-violet-400 bg-violet-50" : "border-gray-100 bg-gray-50")}>
+                  <span className="text-sm font-bold">{opt.label}</span>
+                  {relReqRole === opt.value && <Check size={16} className="text-violet-600 mr-auto" />}
+                </button>
+              ))}
+            </div>
+            <textarea value={relReqReason} onChange={e => setRelReqReason(e.target.value)}
+              placeholder="سبب الطلب (اختياري)" rows={2}
+              className="w-full bg-gray-50 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-100 mb-3" />
+            <div className="flex gap-2">
+              <button onClick={sendRelReq} disabled={!relReqRole || submitting}
+                className="flex-1 bg-violet-600 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40">
+                {submitting ? "جاري..." : "إرسال الطلب"}
+              </button>
+              <button onClick={() => setShowRelReq(false)}
+                className="px-4 bg-gray-100 text-gray-500 rounded-xl py-2.5 text-sm font-bold">إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* مودال تغيير العلاقة */}
       {showChangeRelation && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowChangeRelation(false)}>
@@ -2744,17 +2874,20 @@ export default function FriendsView() {
             <p className="text-xs text-gray-400 text-center mb-4">النوع الحالي: {getRelationLabel(relationType)}</p>
             <div className="space-y-2">
               {[
-                { value: "friend", label: "صديق", emoji: "🤝" },
-                { value: "employer", label: "صاحب عمل", emoji: "💼" },
-                { value: "colleague", label: "أعمل مع", emoji: "👥" },
-                { value: "partner", label: "شريك", emoji: "🤝" },
-                { value: "client", label: "عميل", emoji: "📋" },
-                { value: "association", label: "جمعية", emoji: "🔄" },
+                { value: "friend", label: "صديق", paired: "صديق", emoji: "🤝" },
+                { value: "employer", label: "مدير", paired: "يعمل معك", emoji: "💼" },
+                { value: "colleague", label: "أعمل مع", paired: "مديرك", emoji: "👥" },
+                { value: "partner", label: "شريك", paired: "شريك", emoji: "🤝" },
+                { value: "client", label: "عميل", paired: "عميل", emoji: "📋" },
+                { value: "association", label: "جمعية (مدير)", paired: "عضو", emoji: "🔄" },
               ].map((opt) => (
                 <button key={opt.value} onClick={() => setRelationType(opt.value)}
                   className={"w-full flex items-center gap-3 p-3 rounded-2xl border transition " + (relationType === opt.value ? "border-[var(--accent)] bg-green-50" : "border-gray-100 bg-gray-50")}>
                   <span className="text-xl">{opt.emoji}</span>
-                  <span className="text-sm font-bold">{opt.label}</span>
+                  <div className="flex-1">
+                    <div className="text-sm font-bold">{opt.label}</div>
+                    <div className="text-[10px] text-gray-400">الطرف الآخر: {opt.paired}</div>
+                  </div>
                   {relationType === opt.value && <Check size={16} className="text-[var(--accent)] mr-auto" />}
                 </button>
               ))}
