@@ -8,6 +8,21 @@ const PRIV_KEY_STORE = "alrafeeq-priv-key-encrypted";
 // ─── متغيّر بالذاكرة فقط — يُمحى عند إعادة تحميل الصفحة أو logout ───
 let inMemoryPrivateKey: CryptoKey | null = null;
 
+// ─── حماية من brute-force محلي (offline) ───
+let unlockAttempts = 0;
+let unlockLockedUntil = 0; // timestamp (ms) — 0 = غير مقفل
+
+const MAX_FAST_ATTEMPTS = 3; // 3 محاولات سريعة قبل التباطؤ
+const LOCKOUT_DELAYS = [5000, 10000, 30000, 60000, 300000, 900000]; // 5s → 15min
+
+export function getUnlockStatus(): { locked: boolean; waitMs: number; attempts: number } {
+  const now = Date.now();
+  if (unlockLockedUntil > now) {
+    return { locked: true, waitMs: unlockLockedUntil - now, attempts: unlockAttempts };
+  }
+  return { locked: false, waitMs: 0, attempts: unlockAttempts };
+}
+
 // ─── اشتق مفتاح تشفير (KEK) من الـ PIN ───
 async function deriveKEK(pin: string, salt: Uint8Array): Promise<CryptoKey> {
   const pinKey = await crypto.subtle.importKey(
@@ -89,6 +104,12 @@ export async function setupEncryptedPrivateKey(
 
 // ─── عند الدخول: فكّ تشفير المفتاح بالـ PIN ───
 export async function unlockPrivateKey(pin: string): Promise<boolean> {
+  // ─── تحقق من القفل المحلي ───
+  const now = Date.now();
+  if (unlockLockedUntil > now) {
+    return false; // مقفل — لا تُجرّب
+  }
+
   const stored = await getEncryptedKey();
   if (!stored) return false;
 
@@ -105,9 +126,21 @@ export async function unlockPrivateKey(pin: string): Promise<boolean> {
       { name: "ECDH", namedCurve: "P-256" },
       false, ["deriveKey", "deriveBits"]
     );
+    // نجاح ← صفّر العدّاد
+    unlockAttempts = 0;
+    unlockLockedUntil = 0;
     return true;
   } catch {
-    return false; // PIN خاطئ = فشل فك التشفير (AES-GCM auth tag)
+    // فشل ← زيادة العدّاد + تأخير تصاعدي
+    unlockAttempts++;
+    if (unlockAttempts > MAX_FAST_ATTEMPTS) {
+      const delayIdx = Math.min(
+        unlockAttempts - MAX_FAST_ATTEMPTS - 1,
+        LOCKOUT_DELAYS.length - 1
+      );
+      unlockLockedUntil = now + LOCKOUT_DELAYS[delayIdx];
+    }
+    return false; // PIN خاطئ
   }
 }
 

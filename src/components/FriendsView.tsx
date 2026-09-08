@@ -6,7 +6,7 @@ import PaymentMethodsModal from "./PaymentMethodsModal";
 import QRCode, { downloadQR } from "./QRCode";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
-import { unlockPrivateKey, hasEncryptedKey, getActivePrivateKey } from "@/lib/e2e-key-manager";
+import { unlockPrivateKey, hasEncryptedKey, getActivePrivateKey, getUnlockStatus } from "@/lib/e2e-key-manager";
 
 interface Friend {
   friendship_id: string;
@@ -144,6 +144,7 @@ export default function FriendsView() {
   const [pinUnlockInput, setPinUnlockInput] = useState("");
   const [pinUnlockErr, setPinUnlockErr] = useState("");
   const [pinUnlockLoading, setPinUnlockLoading] = useState(false);
+  const [unlockWaitMs, setUnlockWaitMs] = useState(0);
   const msgEndRef = useRef<HTMLDivElement>(null);
   const chatChannelRef = useRef<any>(null);
   const friendsRef = useRef<Friend[]>([]);
@@ -602,6 +603,13 @@ export default function FriendsView() {
   // ─── فتح المفتاح الخاص بـ PIN (مباشرة في الذاكرة — لا storage) ───
   async function handlePinUnlock() {
     setPinUnlockErr("");
+    // تحقق من القفل المحلي (brute-force protection)
+    const status = getUnlockStatus();
+    if (status.locked) {
+      setUnlockWaitMs(status.waitMs);
+      setPinUnlockErr("محاولات كثيرة — انتظر");
+      return;
+    }
     if (pinUnlockInput.length < 4) {
       setPinUnlockErr("الرمز يجب أن يكون 4 خانات على الأقل");
       return;
@@ -618,10 +626,16 @@ export default function FriendsView() {
         // ─── فتح المفتاح الموجود ───
         const ok = await unlockPrivateKey(pinUnlockInput);
         if (!ok) {
+        const st = getUnlockStatus();
+        if (st.locked) {
+          setUnlockWaitMs(st.waitMs);
+          setPinUnlockErr("محاولات كثيرة — انتظر " + Math.ceil(st.waitMs / 1000) + " ثانية");
+        } else {
           setPinUnlockErr("الرمز غير صحيح");
-          setPinUnlockLoading(false);
-          return;
         }
+        setPinUnlockLoading(false);
+        return;
+      }
         const priv = getActivePrivateKey();
         if (priv) {
           setMyPrivKey(priv);
@@ -2421,8 +2435,10 @@ export default function FriendsView() {
                 placeholder="رمز الحماية (4 خانات)"
                 maxLength={8}
                 autoFocus
+                autoComplete="off"
+                inputMode="numeric"
                 className="w-full border rounded-xl p-3 text-center text-lg tracking-widest mb-3"
-                disabled={pinUnlockLoading}
+                disabled={pinUnlockLoading || unlockWaitMs > 0}
               />
               {pinUnlockErr && <p className="text-red-500 text-sm mb-3">{pinUnlockErr}</p>}
               <div className="flex gap-2">
