@@ -62,6 +62,8 @@ export function rateLimit(
 
 // احصل على معرّف العميل من الطلب
 export function getClientId(req: Request): string {
+  const vercelFwd = req.headers.get("x-vercel-forwarded-for");
+  if (vercelFwd) return vercelFwd.split(",")[0].trim();
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   return req.headers.get("x-real-ip") || "unknown";
