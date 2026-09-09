@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     entityType: "settlement",
     entityId: data.id,
     amount: amt.value,
-    metadata: { method, debt_request_id },
+    metadata: { linked_debt_id, status: status || "pending" },
     req: req as unknown as Request,
   });
 

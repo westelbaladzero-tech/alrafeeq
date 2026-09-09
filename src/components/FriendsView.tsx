@@ -7,6 +7,7 @@ import QRCode, { downloadQR } from "./QRCode";
 import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
 import { unlockPrivateKey, hasEncryptedKey, getActivePrivateKey, getUnlockStatus } from "@/lib/e2e-key-manager";
+import { getUserIdSync } from "@/lib/client-id";
 
 interface Friend {
   friendship_id: string;
