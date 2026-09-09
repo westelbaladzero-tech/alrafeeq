@@ -5,17 +5,9 @@ import { validatePin } from "@/lib/validation";
 import * as crypto from "crypto";
 
 export async function POST(req: NextRequest) {
-  // ─── Rate limiting عبر قاعدة البيانات (5/دقيقة) ───
-  const clientId = getClientId(req as unknown as Request);
-  const rl = await rateLimitDB("pin:" + clientId, 5, 60);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "محاولات كثيرة — انتظر دقيقة" },
-      { status: 429 }
-    );
-  }
-
-  const { pin, accessToken, userId } = await req.json();
+  // ─── قراءة البيانات أولاً للحصول على userId ───
+  const body = await req.json().catch(() => ({}));
+  const { pin, accessToken, userId } = body;
   if (!pin) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
   }
@@ -25,6 +17,27 @@ export async function POST(req: NextRequest) {
   }
   if (!accessToken && !userId) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
+  }
+
+  // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) ───
+  const clientId = getClientId(req as unknown as Request);
+  const rlIp = await rateLimitDB("pin:ip:" + clientId, 5, 60);
+  if (!rlIp.allowed) {
+    return NextResponse.json(
+      { error: "محاولات كثيرة — انتظر دقيقة" },
+      { status: 429 }
+    );
+  }
+
+  // ─── طبقة 2: Rate limiting على مستوى الحساب (5/دقيقة) ───
+  // يحمي من IP rotation على حساب معيّن
+  const targetId = userId || accessToken || clientId;
+  const rlUser = await rateLimitDB("pin:user:" + targetId, 5, 60);
+  if (!rlUser.allowed) {
+    return NextResponse.json(
+      { error: "محاولات كثيرة على هذا الحساب — انتظر دقيقة" },
+      { status: 429 }
+    );
   }
 
   const admin = getAdminClient();

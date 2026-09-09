@@ -5,17 +5,31 @@ import { sanitizeText } from "@/lib/validation";
 
 // استرداد الحساب — إرسال Magic Link للإيميل
 export async function POST(req: NextRequest) {
-  // ─── Rate limiting: 3 محاولات/دقيقة لكل IP ───
+  // ─── قراءة الإيميل أولاً ───
+  const { email } = await req.json().catch(() => ({}));
+
+  // ─── طبقة 1: Rate limiting على مستوى IP (3/دقيقة) ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = await rateLimitDB("recover:" + clientId, 3, 60);
-  if (!rl.allowed) {
+  const rlIp = await rateLimitDB("recover:ip:" + clientId, 3, 60);
+  if (!rlIp.allowed) {
     return NextResponse.json(
       { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },
       { status: 200 }
     );
   }
 
-  const { email } = await req.json();
+  // ─── طبقة 2: Rate limiting على مستوى الإيميل (3/دقيقة) ───
+  // يحمي من spam حساب معيّن عبر IP rotation
+  if (email) {
+    const rlEmail = await rateLimitDB("recover:email:" + email, 3, 60);
+    if (!rlEmail.allowed) {
+      return NextResponse.json(
+        { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },
+        { status: 200 }
+      );
+    }
+  }
+
   if (!email) {
     return NextResponse.json(
       { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },

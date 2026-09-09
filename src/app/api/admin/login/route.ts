@@ -22,11 +22,23 @@ function safeCompare(input: string, expected: string): boolean {
 }
 
 export async function POST(req: Request) {
-  // ─── Rate limiting: 5 محاولات/دقيقة ───
+  // ─── قراءة البيانات أولاً ───
+  const { email, password } = await req.json().catch(() => ({}));
+
+  // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = await rateLimitDB("admin-login:" + clientId, 5, 60);
-  if (!rl.allowed) {
+  const rlIp = await rateLimitDB("admin-login:ip:" + clientId, 5, 60);
+  if (!rlIp.allowed) {
     return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
+  }
+
+  // ─── طبقة 2: Rate limiting على مستوى الإيميل (5/دقيقة) ───
+  // يحمي من IP rotation على حساب الأدمن
+  if (email) {
+    const rlEmail = await rateLimitDB("admin-login:email:" + email, 5, 60);
+    if (!rlEmail.allowed) {
+      return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
+    }
   }
 
   // ─── تحقق من القفل التراكمي ───
@@ -37,8 +49,6 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { email, password } = await req.json();
-
     if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
       return NextResponse.json({ error: "لم يتم إعداد حساب الأدمن بعد" }, { status: 500 });
     }
