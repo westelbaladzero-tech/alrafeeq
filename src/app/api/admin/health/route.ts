@@ -19,12 +19,12 @@ function verifyAdmin(req: Request): boolean {
   const token = req.headers.get("cookie") || "";
   const match = token.match(/admin_session=([^;]+)/);
   if (!match) return false;
-  const expected = crypto.createHash("sha256").update(ADMIN_EMAIL + ADMIN_PASSWORD).digest("hex");
-  // ─── مقارنة بزمن ثابت (منع timing attack) ───
+  // ─── hash القيمتين (طول ثابت 32 byte) ثم timingSafeEqual ───
   try {
-    const a = Buffer.from(match[1]);
-    const b = Buffer.from(expected);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    const expected = crypto.createHash("sha256").update(ADMIN_EMAIL + ADMIN_PASSWORD).digest("hex");
+    const inputHash = crypto.createHash("sha256").update(match[1]).digest();
+    const expectedHash = crypto.createHash("sha256").update(expected).digest();
+    return crypto.timingSafeEqual(inputHash, expectedHash);
   } catch {
     return false;
   }

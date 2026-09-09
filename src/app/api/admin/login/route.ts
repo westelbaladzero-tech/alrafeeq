@@ -5,8 +5,20 @@ import { rateLimit, getClientId } from "@/lib/rate-limit";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
+// ─── قفل تراكمي للأدمن (أعلى قيمة كهدف) ───
+const adminLocks = new Map<string, { until: number; attempts: number }>();
+const MAX_ADMIN_ATTEMPTS = 5;
+const ADMIN_LOCK_MS = 30 * 60 * 1000; // 30 دقيقة (أطول من المستخدم العادي)
+
 function getAdminToken(): string {
   return crypto.createHash("sha256").update(ADMIN_EMAIL + ADMIN_PASSWORD).digest("hex");
+}
+
+// ─── مقارنة بزمن ثابت: hash القيمتين (طول ثابت دائماً) ───
+function safeCompare(input: string, expected: string): boolean {
+  const hashA = crypto.createHash("sha256").update(input).digest();
+  const hashB = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
 }
 
 export async function POST(req: Request) {
@@ -17,6 +29,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
+  // ─── تحقق من القفل التراكمي ───
+  const lock = adminLocks.get(clientId);
+  if (lock && lock.until > Date.now()) {
+    const mins = Math.ceil((lock.until - Date.now()) / 60000);
+    return NextResponse.json({ error: `تم قفل الدخول — حاول بعد ${mins} دقيقة` }, { status: 423 });
+  }
+
   try {
     const { email, password } = await req.json();
 
@@ -24,15 +43,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "لم يتم إعداد حساب الأدمن بعد" }, { status: 500 });
     }
 
-    // ─── مقارنة بزمن ثابت (منع timing attack) ───
-    const emailOk = email === ADMIN_EMAIL;
-    const passOk = crypto.timingSafeEqual(
-      Buffer.from(String(password)),
-      Buffer.from(String(ADMIN_PASSWORD).padEnd(String(password).length, "\0"))
-    );
+    // ─── مقارنة بزمن ثابت (hash + timingSafeEqual) ───
+    const emailOk = safeCompare(String(email || ""), ADMIN_EMAIL);
+    const passOk = safeCompare(String(password || ""), ADMIN_PASSWORD);
+
     if (!emailOk || !passOk) {
+      // ─── زيادة عدّاد المحاولات الفاشلة ───
+      const current = adminLocks.get(clientId) || { until: 0, attempts: 0 };
+      current.attempts++;
+      if (current.attempts >= MAX_ADMIN_ATTEMPTS) {
+        current.until = Date.now() + ADMIN_LOCK_MS;
+        current.attempts = 0;
+        adminLocks.set(clientId, current);
+        return NextResponse.json({ error: `محاولات خاطئة كثيرة — قُفل 30 دقيقة` }, { status: 423 });
+      }
+      adminLocks.set(clientId, current);
       return NextResponse.json({ error: "بيانات غير صحيحة" }, { status: 401 });
     }
+
+    // ─── نجاح ← صفّر العدّاد ───
+    adminLocks.delete(clientId);
 
     const token = getAdminToken();
     const res = NextResponse.json({ ok: true, message: "تم تسجيل الدخول" });

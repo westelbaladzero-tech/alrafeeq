@@ -17,7 +17,6 @@ export async function POST(req: NextRequest) {
 
   const { email } = await req.json();
   if (!email) {
-    // نفس الرسالة لمنع enumeration
     return NextResponse.json(
       { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },
       { status: 200 }
@@ -25,6 +24,15 @@ export async function POST(req: NextRequest) {
   }
 
   const cleanEmail = sanitizeText(email.toLowerCase().trim(), 200);
+
+  // ─── Rate limiting لكل إيميل: حد واحد بالساعة (يمنع إغراق بريد شخص) ───
+  const emailRl = rateLimit("recover-email:" + cleanEmail, 1, 60 * 60 * 1000);
+  if (!emailRl.allowed) {
+    return NextResponse.json(
+      { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },
+      { status: 200 }
+    );
+  }
 
   const admin = getAdminClient();
   if (!admin) {
