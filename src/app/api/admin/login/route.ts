@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -24,7 +24,7 @@ function safeCompare(input: string, expected: string): boolean {
 export async function POST(req: Request) {
   // ─── Rate limiting: 5 محاولات/دقيقة ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("admin-login:" + clientId, 5, 60 * 1000);
+  const rl = await rateLimitDB("admin-login:" + clientId, 5, 60);
   if (!rl.allowed) {
     return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
   }

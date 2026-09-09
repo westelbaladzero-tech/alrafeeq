@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, getServerClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
 
 // استرداد الحساب — إرسال Magic Link للإيميل
 export async function POST(req: NextRequest) {
   // ─── Rate limiting: 3 محاولات/دقيقة لكل IP ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("recover:" + clientId, 3, 60 * 1000);
+  const rl = await rateLimitDB("recover:" + clientId, 3, 60);
   if (!rl.allowed) {
     return NextResponse.json(
       { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   const cleanEmail = sanitizeText(email.toLowerCase().trim(), 200);
 
   // ─── Rate limiting لكل إيميل: حد واحد بالساعة (يمنع إغراق بريد شخص) ───
-  const emailRl = rateLimit("recover-email:" + cleanEmail, 1, 60 * 60 * 1000);
+  const emailRl = await rateLimitDB("recover-email:" + cleanEmail, 1, 3600);
   if (!emailRl.allowed) {
     return NextResponse.json(
       { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },

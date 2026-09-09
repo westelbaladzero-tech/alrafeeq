@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { getUserIdSync } from "@/lib/client-id";
 import { logFinancialEvent } from "@/lib/audit-log";
 
 // POST /api/p2p/dispute/resolve — الطرف الآخر يحل النزاع
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("p2p-res:" + clientId, 3, 60 * 1000);
+  const rl = await rateLimitDB("p2p-res:" + clientId, 3, 60);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
   }

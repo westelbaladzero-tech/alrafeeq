@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { getUserIdSync } from "@/lib/client-id";
 
 // POST /api/p2p/confirm — المستلم يؤكّد الاستلام

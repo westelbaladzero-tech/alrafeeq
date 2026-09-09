@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { getUserIdSync } from "@/lib/client-id";
 import { validateAmount, sanitizeText } from "@/lib/validation";
 import { logFinancialEvent } from "@/lib/audit-log";
@@ -8,7 +8,7 @@ import { logFinancialEvent } from "@/lib/audit-log";
 export async function POST(req: NextRequest) {
   // ─── Rate limiting: 10 طلبات/دقيقة ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("sett:" + clientId, 10, 60 * 1000);
+  const rl = await rateLimitDB("sett:" + clientId, 10, 60);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
