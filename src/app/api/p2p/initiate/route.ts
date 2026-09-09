@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimitDB, getClientId } from "@/lib/rate-limit";
+import { rateLimit, getClientId } from "@/lib/rate-limit";
 import { validateAmount } from "@/lib/validation";
 import { getUserIdSync } from "@/lib/client-id";
 
