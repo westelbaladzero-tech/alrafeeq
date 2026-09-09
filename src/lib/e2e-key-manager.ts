@@ -26,11 +26,11 @@ export function getUnlockStatus(): { locked: boolean; waitMs: number; attempts: 
 // ─── اشتق مفتاح تشفير (KEK) من الـ PIN ───
 async function deriveKEK(pin: string, salt: Uint8Array): Promise<CryptoKey> {
   const pinKey = await crypto.subtle.importKey(
-    "raw", Buffer.from(new TextEncoder().encode(pin)),
+    "raw", new TextEncoder().encode(pin) as unknown as BufferSource,
     "PBKDF2", false, ["deriveKey"]
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: salt as BufferSource, iterations: 600000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as unknown as BufferSource, iterations: 600000, hash: "SHA-256" },
     pinKey,
     { name: "AES-GCM", length: 256 },
     false, // غير قابل للاستخراج
@@ -92,7 +92,7 @@ export async function setupEncryptedPrivateKey(
   const kek = await deriveKEK(pin, salt);
 
   const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv }, kek, privateKeyRaw
+    { name: "AES-GCM", iv: iv as unknown as BufferSource }, kek, privateKeyRaw
   );
 
   await saveEncryptedKey({
@@ -119,7 +119,7 @@ export async function unlockPrivateKey(pin: string): Promise<boolean> {
 
   try {
     const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv }, kek, stored.encryptedPrivateKey
+      { name: "AES-GCM", iv: iv as unknown as BufferSource }, kek, stored.encryptedPrivateKey
     );
     inMemoryPrivateKey = await crypto.subtle.importKey(
       "pkcs8", decrypted,
