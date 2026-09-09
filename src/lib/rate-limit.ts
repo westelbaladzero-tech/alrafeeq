@@ -1,5 +1,7 @@
 // ─── تحديد المعدل (Rate Limiting) ───
-// منع الإساءة بإبقاء سجل في الذاكرة
+// طبقتان: in-memory (سريع) + Supabase (shared بين instances)
+
+import { getAdminClient } from "./supabase-server";
 
 interface RateEntry {
   count: number;
@@ -7,16 +9,36 @@ interface RateEntry {
 }
 
 const store: Map<string, RateEntry> = new Map();
-const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 دقائق
 
-// نظّف السجلات القديمة دورياً
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of store.entries()) {
-    if (entry.resetAt < now) store.delete(key);
+// ─── Rate limiting عبر قاعدة البيانات (يعمل بين كل instances) ───
+export async function rateLimitDB(
+  identifier: string,
+  limit: number = 10,
+  windowSeconds: number = 60
+): Promise<{ allowed: boolean; remaining: number }> {
+  const admin = getAdminClient();
+  if (!admin) {
+    // fallback لـ in-memory لو ما فيه admin client
+    return rateLimit(identifier, limit, windowSeconds * 1000);
   }
-}, CLEANUP_INTERVAL).unref?.();
 
+  const { data, error } = await admin.rpc("check_and_increment_rate_limit", {
+    p_key: identifier,
+    p_limit: limit,
+    p_window_seconds: windowSeconds,
+  });
+
+  if (error) {
+    console.error("rateLimitDB error:", error);
+    // fail open — خلّي الطلب يمر (أفضل من حظر المستخدمين الشرعيين)
+    return { allowed: true, remaining: limit - 1 };
+  }
+
+  const count = data as number;
+  return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
+}
+
+// ─── in-memory rate limiting (fallback / سريع للمسارات غير الحرجة) ───
 export function rateLimit(
   identifier: string,
   limit: number = 10,

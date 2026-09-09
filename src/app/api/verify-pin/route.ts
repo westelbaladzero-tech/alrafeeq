@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerClient, getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { validatePin } from "@/lib/validation";
 import * as crypto from "crypto";
 
 export async function POST(req: NextRequest) {
-  // ─── Rate limiting: 5 محاولات/دقيقة ───
+  // ─── Rate limiting عبر قاعدة البيانات (5/دقيقة) ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("pin:" + clientId, 5, 60 * 1000);
+  const rl = await rateLimitDB("pin:" + clientId, 5, 60);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "محاولات كثيرة — انتظر دقيقة" },
