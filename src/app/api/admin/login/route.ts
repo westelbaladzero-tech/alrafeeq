@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { rateLimit, getClientId } from "@/lib/rate-limit";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -9,6 +10,13 @@ function getAdminToken(): string {
 }
 
 export async function POST(req: Request) {
+  // ─── Rate limiting: 5 محاولات/دقيقة ───
+  const clientId = getClientId(req as unknown as Request);
+  const rl = rateLimit("admin-login:" + clientId, 5, 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
+  }
+
   try {
     const { email, password } = await req.json();
 
@@ -16,7 +24,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "لم يتم إعداد حساب الأدمن بعد" }, { status: 500 });
     }
 
-    if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+    // ─── مقارنة بزمن ثابت (منع timing attack) ───
+    const emailOk = email === ADMIN_EMAIL;
+    const passOk = crypto.timingSafeEqual(
+      Buffer.from(String(password)),
+      Buffer.from(String(ADMIN_PASSWORD).padEnd(String(password).length, "\0"))
+    );
+    if (!emailOk || !passOk) {
       return NextResponse.json({ error: "بيانات غير صحيحة" }, { status: 401 });
     }
 

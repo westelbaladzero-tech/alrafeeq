@@ -10,7 +10,14 @@ function verifyAdmin(req: Request): boolean {
   const match = token.match(/admin_session=([^;]+)/);
   if (!match) return false;
   const expected = crypto.createHash("sha256").update(ADMIN_EMAIL + ADMIN_PASSWORD).digest("hex");
-  return match[1] === expected;
+  // ─── مقارنة بزمن ثابت (منع timing attack) ───
+  try {
+    const a = Buffer.from(match[1]);
+    const b = Buffer.from(expected);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
 }
 
 export async function GET(req: Request) {
