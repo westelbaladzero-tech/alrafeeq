@@ -451,21 +451,20 @@ export default function FriendsView() {
     setMsgSending(true);
     const sb = getSupabase() as any;
     if (!sb) { setMsgSending(false); e.target.value = ""; return; }
-    // ارفع الملف للتخزين
-    const ext = file.name.split(".").pop() || "bin";
-    const filePath = `${chatFriend.friendship_id}/${tempId}.${ext}`;
-    const { error: upErr } = await sb.storage.from("chat-files").upload(filePath, file);
-    if (upErr) {
-      showToast("تعذّر رفع الملف");
+    // ارفع الملف عبر API route آمن (server-side + magic bytes)
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", `chat/${chatFriend.friendship_id}`);
+    const upRes = await fetch("/api/upload", { method: "POST", body: formData });
+    const upData = await upRes.json();
+    if (!upData.ok) {
+      showToast(upData.error || "تعذّر رفع الملف");
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setMsgSending(false);
       e.target.value = "";
       return;
     }
-    // احصل على رابط موقّع (خاص — ليس عاماً)
-    const { data: urlData } = await sb.storage.from("chat-files")
-      .createSignedUrl(filePath, 3600);
-    const fileUrl = urlData?.signedUrl;
+    const fileUrl = upData.url;
     // أرسل الرسالة
     const { data: msgData, error: msgErr } = await sb.from("messages").insert({
       friendship_id: chatFriend.friendship_id,
@@ -991,11 +990,14 @@ export default function FriendsView() {
     setP2pReceiptUploading(true);
     const sb = getSupabase() as any;
     if (!sb) { setP2pReceiptUploading(false); e.target.value = ""; return; }
-    const filePath = `p2p-receipts/${p2pResult.id}.${file.name.split(".").pop() || "jpg"}`;
-    const { error: upErr } = await sb.storage.from("chat-files").upload(filePath, file);
-    if (upErr) { showToast("تعذّر رفع الإيصال"); setP2pReceiptUploading(false); e.target.value = ""; return; }
-    const { data: urlData } = await sb.storage.from("chat-files").createSignedUrl(filePath, 86400);
-    const receiptUrl = urlData?.signedUrl;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", `p2p-receipts/${p2pResult.id}`);
+    formData.append("expiry", "86400");
+    const upRes = await fetch("/api/upload", { method: "POST", body: formData });
+    const upData = await upRes.json();
+    if (!upData.ok) { showToast(upData.error || "تعذّر رفع الإيصال"); setP2pReceiptUploading(false); e.target.value = ""; return; }
+    const receiptUrl = upData.url;
     if (!receiptUrl) { showToast("تعذّر الحصول على رابط"); setP2pReceiptUploading(false); e.target.value = ""; return; }
     // أرسل للـ API
     try {
