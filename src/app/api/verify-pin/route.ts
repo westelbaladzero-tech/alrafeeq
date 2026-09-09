@@ -8,20 +8,16 @@ export async function POST(req: NextRequest) {
   // ─── Rate limiting عبر قاعدة البيانات (5/دقيقة) ───
   const clientId = getClientId(req as unknown as Request);
   const rl = await rateLimitDB("pin:" + clientId, 5, 60);
-  // DEBUG: أرى حالة rate limiter
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "محاولات كثيرة — انتظر دقيقة" },
-      { status: 429, headers: { "x-rl-key": "pin:" + clientId, "x-rl-allowed": "false" } }
+      { status: 429 }
     );
   }
 
   const { pin, accessToken, userId } = await req.json();
   if (!pin) {
-    return NextResponse.json(
-      { error: "البيانات ناقصة", debug: { key: "pin:" + clientId, allowed: rl.allowed, remaining: rl.remaining } },
-      { status: 400, headers: { "x-rl-key": "pin:" + clientId, "x-rl-remaining": String(rl.remaining) } }
-    );
+    return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
   }
   // ─── تحقق من صيغة PIN ───
   if (!validatePin(pin)) {
