@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
-import { getUserIdSync } from "@/lib/client-id";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
 import { logFinancialEvent } from "@/lib/audit-log";
 
 // POST /api/p2p/dispute — فتح خلاف
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("p2p-disp:" + clientId, 3, 60 * 1000);
+  const rl = await rateLimitDB("p2p-disp:" + clientId, 3, 60);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
   }
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }

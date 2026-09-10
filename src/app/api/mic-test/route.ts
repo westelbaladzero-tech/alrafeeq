@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { trackUsage } from "@/lib/usage";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -23,7 +23,7 @@ function extractTranscript(payload: any): string {
 
 export async function POST(req: Request) {
   // ─── Rate limiting: 20 طلب/دقيقة ───
-  const rl = rateLimit("mic:" + getClientId(req), 20, 60 * 1000);
+  const rl = await rateLimitDB("mic:" + getClientId(req), 20, 60);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }

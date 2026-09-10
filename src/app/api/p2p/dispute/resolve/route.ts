@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
-import { getUserIdSync } from "@/lib/client-id";
 import { logFinancialEvent } from "@/lib/audit-log";
 
 // POST /api/p2p/dispute/resolve — الطرف الآخر يحل النزاع
@@ -12,7 +11,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
   }
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }

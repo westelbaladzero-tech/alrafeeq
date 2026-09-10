@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
-import { getUserIdSync } from "@/lib/client-id";
 import { validateAmount, sanitizeText } from "@/lib/validation";
 import { logFinancialEvent } from "@/lib/audit-log";
 
@@ -14,7 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── تحقق من هوية المستخدم ───
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { to_user, friendship_id, amount, description, linked_debt_id, status } = await req.json();

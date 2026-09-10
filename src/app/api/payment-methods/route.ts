@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
-import { getUserIdSync } from "@/lib/client-id";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
 
 // GET /api/payment-methods — وسائلي المسجّلة
 export async function GET(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("pm-get:" + clientId, 20, 60 * 1000);
+  const rl = await rateLimitDB("pm-get:" + clientId, 20, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const admin = getAdminClient();
@@ -57,10 +56,10 @@ export async function GET(req: NextRequest) {
 // POST /api/payment-methods — إضافة وسيلة دفع
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("pm-add:" + clientId, 10, 60 * 1000);
+  const rl = await rateLimitDB("pm-add:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { method, identifier, display_name, is_primary, bank_name, iban, card_type, last_four, card_full, payment_link } = await req.json();
@@ -144,10 +143,10 @@ export async function POST(req: NextRequest) {
 // DELETE /api/payment-methods — حذف وسيلة
 export async function DELETE(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("pm-del:" + clientId, 10, 60 * 1000);
+  const rl = await rateLimitDB("pm-del:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

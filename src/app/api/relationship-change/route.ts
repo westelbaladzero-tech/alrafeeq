@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
-import { getUserIdSync } from "@/lib/client-id";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
 
 // GET /api/relationship-change — طلباتي المعلّقة
 export async function GET(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("rcr-get:" + clientId, 20, 60 * 1000);
+  const rl = await rateLimitDB("rcr-get:" + clientId, 20, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const admin = getAdminClient();
@@ -33,10 +32,10 @@ export async function GET(req: NextRequest) {
 // POST /api/relationship-change — إرسال طلب تغيير
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("rcr-send:" + clientId, 5, 60 * 1000);
+  const rl = await rateLimitDB("rcr-send:" + clientId, 5, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { friendship_id, requested_role, reason } = await req.json();
@@ -86,10 +85,10 @@ export async function POST(req: NextRequest) {
 // PATCH /api/relationship-change — موافقة/رفض
 export async function PATCH(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("rcr-res:" + clientId, 10, 60 * 1000);
+  const rl = await rateLimitDB("rcr-res:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { request_id, approved } = await req.json();

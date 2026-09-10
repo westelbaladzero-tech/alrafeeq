@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
-import { rateLimit, getClientId } from "@/lib/rate-limit";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { validateAmount } from "@/lib/validation";
-import { getUserIdSync } from "@/lib/client-id";
 
 // POST /api/p2p/initiate — بدء معاملة P2P
 export async function POST(req: NextRequest) {
   const clientId = getClientId(req as unknown as Request);
-  const rl = rateLimit("p2p-init:" + clientId, 5, 60 * 1000);
+  const rl = await rateLimitDB("p2p-init:" + clientId, 5, 60);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
-  const userId = getUserIdSync();
+  const userId = req.headers.get("x-client-id");
   if (!userId) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }
@@ -50,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   // أنشئ المعاملة
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 دقيقة
+  const expiresAt = new Date(Date.now() + 30 * 60); // 30 دقيقة
   const { data, error } = await admin.from("p2p_transactions").insert({
     from_user: userId,
     to_user,

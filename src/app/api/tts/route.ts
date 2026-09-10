@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserIdSync } from "@/lib/client-id";
 import { trackUsage } from "@/lib/usage";
 
 // مفاتيح Google Cloud TTS (نفس مفتاح Gemini أو مفتاح منفصل)
@@ -29,7 +28,7 @@ const EN_VOICES = {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = getUserIdSync();
+    const userId = req.headers.get("x-client-id");
     if (!userId) {
       return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
     }
