@@ -4,6 +4,7 @@ import { CreditCard, Wallet, X, Plus, Trash2, Loader2, Check, Landmark, Bitcoin,
 import { getResolvedUserId } from "@/lib/client-id";
 import PayPalGuide from "./PayPalGuide";
 import BybitGuide from "./BybitGuide";
+import { getAuthHeaders } from "@/lib/auth-client";
 
 interface Method {
   id: string;
@@ -58,7 +59,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
   async function loadMethods(id: string) {
     setLoading(true);
     try {
-      const res = await fetch("/api/payment-methods", { headers: { "x-client-id": id } });
+      const res = await fetch("/api/payment-methods", { headers: { ...(await getAuthHeaders()) } });
       const data = await res.json();
       if (data.ok) setMethods(data.methods || []);
     } catch {}
@@ -98,7 +99,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
       }
       const res = await fetch("/api/payment-methods", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-client-id": uid },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -121,7 +122,7 @@ export default function PaymentMethodsModal({ onClose }: { onClose: () => void }
     try {
       const res = await fetch("/api/payment-methods?id=" + id, {
         method: "DELETE",
-        headers: { "x-client-id": uid },
+        headers: { ...(await getAuthHeaders()) },
       });
       const data = await res.json();
       if (data.ok) loadMethods(uid);

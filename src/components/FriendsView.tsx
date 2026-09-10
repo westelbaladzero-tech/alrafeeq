@@ -8,6 +8,7 @@ import { getResolvedUserId } from "@/lib/client-id";
 import { generateKeyPair, getPrivateKey, encryptMessage, decryptMessage, importPublicKey, encryptPrivateKeyForBackup, decryptPrivateKeyFromBackup } from "@/lib/e2e-crypto";
 import { unlockPrivateKey, hasEncryptedKey, getActivePrivateKey, getUnlockStatus } from "@/lib/e2e-key-manager";
 import { getUserIdSync } from "@/lib/client-id";
+import { getAuthHeaders } from "@/lib/auth-client";
 
 interface Friend {
   friendship_id: string;
@@ -846,10 +847,10 @@ export default function FriendsView() {
     if (!chatFriend || !uid) return;
     setP2pLoading(true);
     try {
-      const friendRes = await fetch("/api/payment-methods?friend_id=" + chatFriend.friend_id, { headers: { "x-client-id": uid } });
+      const friendRes = await fetch("/api/payment-methods?friend_id=" + chatFriend.friend_id, { headers: { ...(await getAuthHeaders()) } });
       const friendData = await friendRes.json();
       const friendMethods = friendData.ok ? (friendData.methods || []) : [];
-      const myRes = await fetch("/api/payment-methods", { headers: { "x-client-id": uid } });
+      const myRes = await fetch("/api/payment-methods", { headers: { ...(await getAuthHeaders()) } });
       const myData = await myRes.json();
       const myMethods = myData.ok ? (myData.methods || []) : [];
       const myMethodTypes = new Set(myMethods.map((m: any) => m.method));
@@ -935,13 +936,13 @@ export default function FriendsView() {
     try {
       // اجلب وسائل الصديق
       const friendRes = await fetch(`/api/payment-methods?friend_id=${chatFriend.friend_id}`, {
-        headers: { "x-client-id": uid || "" },
+        headers: { ...(await getAuthHeaders()) },
       });
       const friendData = await friendRes.json();
       const friendMethods = friendData.ok ? (friendData.methods || []) : [];
       // اجلب وسائلي أنا
       const myRes = await fetch("/api/payment-methods", {
-        headers: { "x-client-id": uid || "" },
+        headers: { ...(await getAuthHeaders()) },
       });
       const myData = await myRes.json();
       const myMethods = myData.ok ? (myData.methods || []) : [];
@@ -962,7 +963,7 @@ export default function FriendsView() {
     try {
       const res = await fetch("/api/p2p/initiate", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({
           to_user: chatFriend.friend_id,
           friendship_id: chatFriend.friendship_id,
@@ -1003,7 +1004,7 @@ export default function FriendsView() {
     try {
       const res = await fetch("/api/p2p/upload-receipt", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({ transaction_id: p2pResult.id, receipt_url: receiptUrl }),
       });
       const data = await res.json();
@@ -1025,7 +1026,7 @@ export default function FriendsView() {
     if (!chatFriend || !uid) return;
     try {
       const res = await fetch("/api/p2p?status=verifying", {
-        headers: { "x-client-id": uid || "" },
+        headers: { ...(await getAuthHeaders()) },
       });
       const data = await res.json();
       if (data.ok) {
@@ -1043,7 +1044,7 @@ export default function FriendsView() {
     try {
       const res = await fetch("/api/p2p/confirm", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({ transaction_id: transactionId, confirmed }),
       });
       const data = await res.json();
@@ -1521,7 +1522,7 @@ export default function FriendsView() {
   async function fetchPendingRelReqs() {
     if (!uid) return;
     try {
-      const res = await fetch("/api/relationship-change", { headers: { "x-client-id": uid } });
+      const res = await fetch("/api/relationship-change", { headers: { ...(await getAuthHeaders()) } });
       const data = await res.json();
       if (data.ok) setPendingRelReqs(data.requests || []);
     } catch {}
@@ -1534,7 +1535,7 @@ export default function FriendsView() {
     try {
       const res = await fetch("/api/relationship-change", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-client-id": uid },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({ friendship_id: relReqShip, requested_role: relReqRole, reason: relReqReason }),
       });
       const data = await res.json();
@@ -1557,7 +1558,7 @@ export default function FriendsView() {
     try {
       const res = await fetch("/api/relationship-change", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-client-id": uid },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({ request_id: reqId, approved }),
       });
       const data = await res.json();
@@ -1701,7 +1702,7 @@ export default function FriendsView() {
               try {
                 const sanadRes = await fetch("/api/sanad", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", "x-client-id": uid || "" },
+                  headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
                   body: JSON.stringify({
                     friendship_id: sett.friendship_id,
                     type: "settlement",

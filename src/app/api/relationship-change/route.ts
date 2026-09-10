@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
+import { getAuthUserId } from "@/lib/auth-server";
 
 // GET /api/relationship-change — طلباتي المعلّقة
 export async function GET(req: NextRequest) {
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
   const rl = await rateLimitDB("rcr-get:" + clientId, 20, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const admin = getAdminClient();
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   const rl = await rateLimitDB("rcr-send:" + clientId, 5, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { friendship_id, requested_role, reason } = await req.json();
@@ -88,7 +89,7 @@ export async function PATCH(req: NextRequest) {
   const rl = await rateLimitDB("rcr-res:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { request_id, approved } = await req.json();

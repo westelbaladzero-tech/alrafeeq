@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
+import { getAuthUserId } from "@/lib/auth-server";
 
 // GET /api/sanad?friendship_id=X ← سندات الصداقة
 // GET /api/sanad?debt_id=X ← سندات دين محدد
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
   const rl = await rateLimitDB("sanad-get:" + clientId, 30, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const admin = getAdminClient();
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
   const rl = await rateLimitDB("sanad-create:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { friendship_id, type, category, to_user, amount, description, linked_debt_id, linked_settlement_id, linked_p2p_id, payment_method, receipt_url, status } = await req.json();

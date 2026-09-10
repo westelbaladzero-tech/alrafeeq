@@ -3,6 +3,7 @@ import { getAdminClient, getServerClient } from "@/lib/supabase-server";
 import { parseTransaction } from "@/lib/parser";
 import { trackUsage } from "@/lib/usage";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
+import { getAuthUserId } from "@/lib/auth-server";
 
 const GROQ_KEY = process.env.GROQ_API_KEY;
 

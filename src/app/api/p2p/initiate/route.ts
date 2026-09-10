@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { validateAmount } from "@/lib/validation";
+import { getAuthUserId } from "@/lib/auth-server";
 
 // POST /api/p2p/initiate — بدء معاملة P2P
 export async function POST(req: NextRequest) {
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }

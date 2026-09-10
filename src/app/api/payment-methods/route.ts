@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
+import { getAuthUserId } from "@/lib/auth-server";
 
 // GET /api/payment-methods — وسائلي المسجّلة
 export async function GET(req: NextRequest) {
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
   const rl = await rateLimitDB("pm-get:" + clientId, 20, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const admin = getAdminClient();
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   const rl = await rateLimitDB("pm-add:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { method, identifier, display_name, is_primary, bank_name, iban, card_type, last_four, card_full, payment_link } = await req.json();
@@ -146,7 +147,7 @@ export async function DELETE(req: NextRequest) {
   const rl = await rateLimitDB("pm-del:" + clientId, 10, 60);
   if (!rl.allowed) return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

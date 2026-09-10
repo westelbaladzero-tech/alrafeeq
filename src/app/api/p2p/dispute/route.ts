@@ -3,6 +3,7 @@ import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { sanitizeText } from "@/lib/validation";
 import { logFinancialEvent } from "@/lib/audit-log";
+import { getAuthUserId } from "@/lib/auth-server";
 
 // POST /api/p2p/dispute — فتح خلاف
 export async function POST(req: NextRequest) {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "طلبات كثيرة" }, { status: 429 });
   }
 
-  const userId = req.headers.get("x-client-id");
+  const userId = await getAuthUserId(req);
   if (!userId) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }
