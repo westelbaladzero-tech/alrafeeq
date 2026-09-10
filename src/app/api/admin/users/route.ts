@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     const admin = getAdminClient();
     if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
-    const { data: profiles } = await admin.from("profiles").select("*").order("created_at", { ascending: false });
+    const { data: profiles } = await admin.from("profiles").select("id, name, email, work_type, created_at").order("created_at", { ascending: false });
 
     const users = await Promise.all((profiles || []).map(async (p: any) => {
       const { count } = await admin.from("transactions").select("*", { count: "exact", head: true }).eq("user_id", p.id);
