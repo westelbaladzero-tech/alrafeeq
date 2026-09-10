@@ -1417,38 +1417,20 @@ export default function FriendsView() {
     const sb = getSupabase() as any;
     if (!sb) { setAdding(false); return; }
     try {
-      const { data: target } = await sb.rpc("find_user_by_phone", { search_phone: phoneInput });
-      if (!target || target.length === 0) { setErr("الرقم غير مسجل في التطبيق"); setAdding(false); return; }
-      const friendData = target[0];
-      if (friendData.id === uid) { setErr("ما تقدرش تضيف نفسك"); setAdding(false); return; }
-      const { data: existing } = await sb.from("friendships")
-        .select("id, status, user_a, user_b")
-        .or("user_a.eq." + uid + ",user_b.eq." + uid);
-      const already = (existing || []).find((f: any) =>
-        (f.user_a === uid && f.user_b === friendData.id) ||
-        (f.user_b === uid && f.user_a === friendData.id));
-      if (already) {
-        setErr(already.status === "accepted" ? "صديقك بالفعل" : "طلب معلّق بالفعل");
-        setAdding(false); return;
-      }
-      const { error } = await sb.from("friendships").insert({
-        user_a: uid, user_b: friendData.id, status: "pending", initiator: uid,
+      const { data: { session } } = await sb.auth.getSession();
+      const res = await fetch("/api/friends/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phoneInput, accessToken: session?.access_token }),
       });
-      if (error) { setErr("تعذّر إضافة الصديق"); setAdding(false); return; }
-      setPhoneInput(""); setShowAdd(false);
-      // اسأل المُرسِل عن طبيعة العلاقة
-      const { data: newShip } = await sb.from("friendships")
-        .select("id").eq("user_a", uid).eq("user_b", friendData.id).maybeSingle();
-      if (newShip) {
-        setRelationForShip(newShip.id);
-        setRelationType("");
-        setGam3eyaRole("member");
-        setShowRelation(true);
-      }
+      const data = await res.json();
+      setAdding(false);
+      if (data.error) { setErr(data.error); return; }
+      setPhoneInput("");
+      setShowAdd(false);
       await load();
-      showToast("تم إرسال طلب الصداقة");
-    } catch { setErr("خطأ في الاتصال"); }
-    setAdding(false);
+      showToast(data.message || "تم إرسال طلب الصداقة");
+    } catch { setErr("خطأ في الاتصال"); setAdding(false); }
   }
 
   async function respondFriendship(shipId: string, accept: boolean) {
