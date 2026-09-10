@@ -42,6 +42,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "المعاملة ليست قيد التحقق" }, { status: 400 });
   }
 
+  // ─── تحقق من عدم انتهاء الصلاحية ───
+  if (txn.expires_at && new Date(txn.expires_at).getTime() < Date.now()) {
+    await admin.from("p2p_transactions")
+      .update({ status: "expired" })
+      .eq("id", transaction_id)
+      .eq("status", "verifying");
+    return NextResponse.json({ error: "انتهت صلاحية المعاملة" }, { status: 400 });
+  }
+
   if (!confirmed) {
     // المستلم رفض ← دخول التحكيم
     const { error } = await admin.from("p2p_transactions")

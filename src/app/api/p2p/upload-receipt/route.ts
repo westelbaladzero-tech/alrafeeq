@@ -53,6 +53,15 @@ export async function POST(req: NextRequest) {
 
   if (!["pending_payment", "receipt_uploaded"].includes(txn.status)) {
     return NextResponse.json({ error: "لا يمكن رفع إيصال في هذه الحالة" }, { status: 400 });
+
+  // ─── تحقق من عدم انتهاء الصلاحية ───
+  if (txn.expires_at && new Date(txn.expires_at).getTime() < Date.now()) {
+    await admin.from("p2p_transactions")
+      .update({ status: "expired" })
+      .eq("id", transaction_id)
+      .in("status", ["pending_payment", "receipt_uploaded", "awaiting_details"]);
+    return NextResponse.json({ error: "انتهت صلاحية المعاملة" }, { status: 400 });
+  }
   }
 
   // استخلص بيانات الإيصال بالـ AI (لو متاح)
