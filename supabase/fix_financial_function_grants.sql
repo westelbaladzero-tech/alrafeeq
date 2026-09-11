@@ -25,6 +25,9 @@ REVOKE EXECUTE ON FUNCTION public.get_friend_profile(uuid)
   FROM anon, authenticated, PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.cleanup_old_rate_limits()
   FROM anon, authenticated, PUBLIC;
+-- دالة rate limiting الأساسية — كانت مكشوفة (اكتشاف 11 سبتمبر)
+REVOKE EXECUTE ON FUNCTION public.check_and_increment_rate_limit(text, integer, integer)
+  FROM anon, authenticated, PUBLIC;
 
 -- حالات debt_requests.status المسموح بها
 ALTER TABLE public.debt_requests
