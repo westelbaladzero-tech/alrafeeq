@@ -82,10 +82,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "المعاملة مكتملة أو ملغاة" }, { status: 400 });
   }
 
-  // ألغِ المعاملة
-  const { error } = await admin.from("p2p_transactions")
+  // ألغِ المعاملة (atomic: لا تلغِ لو أصبحت settled/cancelled/expired)
+  const { data: cancelledRows, error } = await admin.from("p2p_transactions")
     .update({ status: "cancelled" })
-    .eq("id", transaction_id);
+    .eq("id", transaction_id)
+    .not("status", "in", '("settled","cancelled","expired")')
+    .select("id");
+
+  if (!error && (!cancelledRows || cancelledRows.length === 0)) {
+    return NextResponse.json({ error: "تمت معالجة المعاملة بالفعل" }, { status: 409 });
+  }
 
   if (error) {
     return NextResponse.json({ error: "تعذّر الإلغاء" }, { status: 500 });
