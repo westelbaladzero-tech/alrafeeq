@@ -90,6 +90,12 @@ export default function PeopleView() {
         </div>
       </div>
 
+      <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 text-center">
+        <p className="text-[10px] text-amber-600 leading-relaxed">
+          💡 هذه الأرصدة من سجل المحادثة. لو عندك صداقات موثّقة، الأرصدة الموثّقة في تبويب الأصدقاء.
+        </p>
+      </div>
+
       {/* قائمة الأشخاص */}
       {people.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 text-gray-400 gap-3">

@@ -293,20 +293,46 @@ export async function POST(req: NextRequest) {
           const topCats = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, a]) => c + ": " + a).join("، ");
           const recent = txs.slice(0, 5).map((t: any) => (t.type === "income" ? "+ دخل" : "- مصروف") + " " + t.amount + " " + t.category).join("\n");
 
-          // بيانات الأشخاص
+          // بيانات الأشخاص — لكن نخطّي اللي عندهم صداقات موثّقة
+          // لأن محور الأصدقاء هو المرجع الموثّق للديون بين الأشخاص
           const personTxs = txs.filter((x: any) => x.person);
           let personData = "";
           if (personTxs.length > 0) {
+            // اجلب أسماء الأصدقاء الموثّقين حتى نخطّيهم
+            const { data: shipsForCheck } = await admin.from("friendships")
+              .select("user_a, user_b")
+              .or("user_a.eq." + userId + ",user_b.eq." + userId)
+              .eq("status", "accepted");
+            const friendIds = new Set<string>();
+            for (const s of shipsForCheck || []) {
+              if (s.user_a === userId) friendIds.add(s.user_b);
+              else friendIds.add(s.user_a);
+            }
+            // اجلب أرقام هواتف الأصدقاء
+            const friendPhones = new Set<string>();
+            if (friendIds.size > 0) {
+              const { data: friendProfiles } = await admin.from("profiles")
+                .select("phone").in("id", Array.from(friendIds));
+              for (const fp of friendProfiles || []) {
+                if (fp.phone) friendPhones.add(fp.phone);
+              }
+            }
+
             const personMap: Record<string, { gave: number; received: number }> = {};
             for (const t of personTxs) {
+              // تخطّي الأشخاص اللي عندهم صداقة موثّقة
+              if (friendPhones.has(t.person)) continue;
               if (!personMap[t.person]) personMap[t.person] = { gave: 0, received: 0 };
               if (t.type === "expense") personMap[t.person].gave += Number(t.amount);
               else personMap[t.person].received += Number(t.amount);
             }
-            personData = "\nالحسابات بينك وبين الناس:\n" + Object.entries(personMap).map(([name, d]) => {
-              const net = d.gave - d.received;
-              return name + ": " + (net > 0 ? "لك " + Math.abs(net) + " جنيه (هو مديون لك)" : "عليك " + Math.abs(net) + " جنيه (انت مديون له)");
-            }).join("\n");
+            const personEntries = Object.entries(personMap);
+            if (personEntries.length > 0) {
+              personData = "\nسجلات أخرى بينك وبين الناس (غير موثّقة كأصدقاء):\n" + personEntries.map(([name, d]) => {
+                const net = d.gave - d.received;
+                return name + ": " + (net > 0 ? "سجّلت له " + Math.abs(net) + " جنيه" : "سجّلت عليك " + Math.abs(net) + " جنيه");
+              }).join("\n");
+            }
           }
           context = "الرصيد: " + balance + " جنيه (الرصيد = الدخل ناقص المصروفات، لو سالب يعني صرف أكتر من دخله)\n" +
             "إجمالي الدخل: " + income + "\nإجمالي المصروفات: " + expense + "\n" +
