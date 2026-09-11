@@ -107,9 +107,9 @@ export async function POST(req: NextRequest) {
     linked_p2p_id: linked_p2p_id || null,
     payment_method: payment_method || null,
     receipt_url: receipt_url || null,
-    status: "pending",  // تجاهل status من العميل — الطرف الآخر يؤكد
+    status: "confirmed",  // تجاهل status من العميل — السند موثّق عند الإنشاء
     sanad_number: sanadNumber,
-    confirmed_at: null,
+    confirmed_at: new Date().toISOString(),
   }).select("id, sanad_number").single();
 
   if (error) return NextResponse.json({ error: "تعذّر الإنشاء" }, { status: 500 });

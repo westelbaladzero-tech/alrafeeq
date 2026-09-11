@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     description: description ? sanitizeText(description, 200) : null,
     category: category || "debt",
     linked_debt_id: linked_debt_id || null,
-    status: "pending",  // تجاهل status من العميل — الطرف الآخر يؤكد
+    status: "confirmed",  // تجاهل status من العميل — التسوية موثّقة عند الإنشاء
   }).select("id").single();
 
   if (error) {
