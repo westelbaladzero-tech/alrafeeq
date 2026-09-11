@@ -387,3 +387,41 @@ status: "confirmed",  // ثابت — تجاهل من العميل
 إصلاح `status="pending"` كان أمنيًا صحيح (منع التلاعب)، لكنه كسر المنطق لأن التطبيق يعتمد على `confirmed` عند الإنشاء. الحل: `status` ثابت يتجاهل العميل — يحقق الأمان دون كسر الـ workflow.
 
 **هذا يثبت أهمية مبدأ عبدالله: "الإصلاح بدون فهم البنية يمكن أن يكون إفسادًا".**
+
+---
+
+## P2P Supporting Batch (مراجعة مركزة)
+
+### p2p/route.ts — race condition في الإلغاء 🔴 (commit bcf0150)
+
+**المشكلة:**
+إلغاء المعاملة كان يحدّث `status = "cancelled"` بدون قيد على الحالة الحالية.
+لو `confirm` و `cancel` حصلا في نفس اللحظة:
+- `confirm` يثبت المعاملة كـ `settled`
+- `cancel` قد يطغى بعدها ويحوّلها إلى `cancelled`
+- **ينتج تناقض حالة: معاملة مؤكدة تُلغى**
+
+**الإصلاح:**
+```typescript
+.update({ status: "cancelled" })
+.eq("id", transaction_id)
+.not("status", "in", '("settled","cancelled","expired")')
+.select("id")
+```
++ إرجاع `409` لو تمت معالجة المعاملة بالفعل.
+
+### ملاحظة مهمة ✅
+**استرجاع الدين عند الإلغاء موجود أصلًا في الكود**:
+```typescript
+await admin.from("debt_requests")
+  .update({ status: "confirmed" })
+  .eq("id", txn.debt_request_id)
+  .eq("status", "p2p_pending");
+```
+إذن النقص لم يكن في منطق استرجاع الدين، بل في **atomicity** فقط.
+
+### p2p/upload-receipt — سليم ✅
+- تحقق من protocol (`https:` / `data:`)
+- حد طول URL
+- فقط المرسل يرفع الإيصال
+- تحقق من الحالة والصلاحية
