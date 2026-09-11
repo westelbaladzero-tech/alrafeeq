@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
 
   // ─── طبقة 1: Rate limiting على مستوى IP (3/دقيقة) ───
   const clientId = getClientId(req as unknown as Request);
-  const rlIp = await rateLimitDB("recover:ip:" + clientId, 3, 60);
+  const rlIp = await rateLimitDB("recover:ip:" + clientId, 3, 60, true);
   if (!rlIp.allowed) {
     return NextResponse.json(
       { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   // ─── طبقة 2: Rate limiting على مستوى الإيميل (3/دقيقة) ───
   // يحمي من spam حساب معيّن عبر IP rotation
   if (email) {
-    const rlEmail = await rateLimitDB("recover:email:" + email, 3, 60);
+    const rlEmail = await rateLimitDB("recover:email:" + email, 3, 60, true);
     if (!rlEmail.allowed) {
       return NextResponse.json(
         { ok: true, message: "إذا كان الإيميل مسجلاً، سيصلك رابط" },

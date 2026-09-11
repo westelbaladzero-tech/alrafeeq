@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, getServerClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
-import { validatePin } from "@/lib/validation";
+import { validatePin, validatePhone } from "@/lib/validation";
 import * as crypto from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -15,6 +15,10 @@ export async function POST(req: NextRequest) {
   const { phone, pin, accessToken } = await req.json().catch(() => ({}));
   if (!phone || !pin) {
     return NextResponse.json({ error: "بيانات ناقصة" }, { status: 400 });
+  }
+
+  if (!validatePhone(phone)) {
+    return NextResponse.json({ error: "رقم الهاتف غير صحيح" }, { status: 400 });
   }
 
   if (!validatePin(pin)) {
