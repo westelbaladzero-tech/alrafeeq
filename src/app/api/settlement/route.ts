@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "غير مصرّح — هذه ليست صداقتك" }, { status: 403 });
   }
 
+  // تحقق من إن to_user هو الطرف الآخر في الصداقة
+  const friendship = ship[0];
+  const otherParty = friendship.user_a === userId ? friendship.user_b : friendship.user_a;
+  if (to_user !== otherParty) {
+    return NextResponse.json({ error: "to_user يجب أن يكون الطرف الآخر في الصداقة" }, { status: 400 });
+  }
+
   // ─── from_user = المستخدم المصادق عليه دائماً ───
   const { data, error } = await admin.from("settlements").insert({
     from_user: userId,
@@ -51,7 +58,7 @@ export async function POST(req: NextRequest) {
     description: description ? sanitizeText(description, 200) : null,
     category: category || "debt",
     linked_debt_id: linked_debt_id || null,
-    status: status || "pending",
+    status: "pending",  // تجاهل status من العميل — الطرف الآخر يؤكد
   }).select("id").single();
 
   if (error) {

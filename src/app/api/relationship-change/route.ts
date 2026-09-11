@@ -117,12 +117,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "لست طرفاً" }, { status: 403 });
   }
 
-  // حدّث الطلب
-  await admin.from("relationship_change_requests")
+  // حدّث الطلب (atomic: فقط لو status = pending)
+  const { data: updatedReq } = await admin.from("relationship_change_requests")
     .update({ status: approved ? "approved" : "rejected", resolved_at: new Date().toISOString() })
-    .eq("id", request_id);
+    .eq("id", request_id)
+    .eq("status", "pending")
+    .select("id");
 
-  // لو موافقة ← طبّق التغيير
+  if (!updatedReq || updatedReq.length === 0) {
+    return NextResponse.json({ error: "تمت معالجة هذا الطلب بالفعل" }, { status: 409 });
+  }
+
+  // لو موافقة ← طبّق التغيير (فقط لو الـ update نجح)
   if (approved) {
     const newRole = reqData.requested_role;
     const pairedRole = getPairedRole(newRole);

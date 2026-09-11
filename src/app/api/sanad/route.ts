@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { getAuthUserId } from "@/lib/auth-server";
+import { validateAmount } from "@/lib/validation";
 
 // GET /api/sanad?friendship_id=X ← سندات الصداقة
 // GET /api/sanad?debt_id=X ← سندات دين محدد
@@ -79,6 +80,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 403 });
   }
 
+  // تحقق من إن to_user هو الطرف الآخر في الصداقة
+  const otherParty = ship.user_a === userId ? ship.user_b : ship.user_a;
+  if (to_user !== otherParty) {
+    return NextResponse.json({ error: "to_user يجب أن يكون الطرف الآخر في الصداقة" }, { status: 400 });
+  }
+
+  // تحقق من المبلغ
+  const amt = validateAmount(amount);
+  if (!amt.ok) return NextResponse.json({ error: "مبلغ غير صحيح" }, { status: 400 });
+
   // احسب رقم السند التالي ذرّياً (RPC يمنع race condition)
   const { data: rpcResult } = await admin.rpc("get_next_sanad_number", { f_ship_id: friendship_id });
   const sanadNumber = rpcResult || 1;
@@ -89,16 +100,16 @@ export async function POST(req: NextRequest) {
     category,
     from_user: userId,
     to_user,
-    amount: Number(amount),
+    amount: amt.value,
     description: description || null,
     linked_debt_id: linked_debt_id || null,
     linked_settlement_id: linked_settlement_id || null,
     linked_p2p_id: linked_p2p_id || null,
     payment_method: payment_method || null,
     receipt_url: receipt_url || null,
-    status: status || "confirmed",
+    status: "pending",  // تجاهل status من العميل — الطرف الآخر يؤكد
     sanad_number: sanadNumber,
-    confirmed_at: status === "confirmed" ? new Date().toISOString() : null,
+    confirmed_at: null,
   }).select("id, sanad_number").single();
 
   if (error) return NextResponse.json({ error: "تعذّر الإنشاء" }, { status: 500 });
