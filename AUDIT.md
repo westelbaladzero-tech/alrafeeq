@@ -203,3 +203,51 @@ auth.users (Supabase Auth)
 5. التزم برسالة واضحة تشرح المشكلة + الإصلاح + الترابط
 
 > التطبيق في حالة صحية ومحمية بعد هذه الجلسة. كل الثغرات المكتشفة مُصلحة ومُلتزمة ومُدفوعة. الحمد لله رب العالمين.
+
+---
+
+## اختبار الثغرات المنطقية في Workflows (هذه الجلسة)
+
+> اختبار منطقي للـ workflows المالية لكتشف ثغرات الـ edge cases اللي ما تظهر في مراجعة الكود.
+
+### P2P Workflow (commit f4ee740)
+
+**1. Race condition في confirm — تكرار تسوية الدين 🔴🔴**
+- المشكلة: side effects (sanad + settle_debt + create_sanad) قبل update الحالة. طلبان متزامنان يضاعفان التسوية.
+- الإصلاح: atomic lock قبل side effects (`update WHERE status=verifying` → 409 لو فشل)
+
+**2. Dispute self-resolve — تلاعب بالـ ledger 🔴🔴**
+- المشكلة: أي طرف يقدر يفتح نزاع ثم يحله بـ `accept` (refunded) → يدّعي استرجاع ما صار
+- الإصلاح: عمود `dispute_opened_by` + تحقق في resolve إن `userId ≠ dispute_opened_by`
+
+### sanad + settlement Workflow (commit 08e14ec)
+
+**3. status من العميل — تلاعب بالـ ledger 🔴🔴**
+- المشكلة: `sanad` ينشئ `status: status || "confirmed"` ذاتياً؛ `settlement` ينشئ `status: status || "pending"` (يقدر يمرر `settled`)
+- الإصلاح: `status: "pending"` فقط (تجاهل من العميل) + `confirmed_at: null`
+
+**4. to_user غير محقّق 🔴🔴**
+- المشكلة: المستخدم يمرر `to_user` بدون تحقق من إنه الطرف الآخر في الصداقة
+- الإصلاح: `const otherParty = ship.user_a === userId ? ship.user_b : ship.user_a; if (to_user !== otherParty) return 400`
+
+**5. amount بدون validateAmount في sanad 🔴**
+- المشكلة: `Number(amount)` يقبل سالب/صفر (يكسر الـ ledger)
+- الإصلاح: استخدم `validateAmount` (consistency مع settlement)
+
+### relationship-change PATCH (commit 08e14ec)
+
+**6. update بدون تحقق من status='pending' 🔴**
+- المشكلة: الـ update ما فيه `.eq("status", "pending")` → يعكس الموافقة/الرفض على طلب already-resolved، والتغيير المطبق على الصداقة ما ينعكس
+- الإصلاح: أضف `.eq("status", "pending")` + 409 لو already-resolved + تطبيق التغيير فقط لو الـ update نجح
+
+### Workflows سليمة (لا ثغرات مكتشفة)
+- `friends/add` — رد موحّد ضد enumeration، منع self-friend، تأخير ثابت ضد timing attacks
+- `register` — magic link + strict rate limiting (طبقتان)
+- `payment-methods` GET — يتحقق من الصداقة قبل عرض وسائل الصديق
+- `relationship-change` self-approve — محمي (`requester_id === userId` → 403)
+
+### الأنماط المتكررة المكتشفة
+الثغرات الـ 6 تنحصر في 3 أنماط (قابلة للإصلاح الدفعي):
+1. **status من العميل (mass assignment)** — تجاهل status، status الافتراضي "pending"
+2. **to_user غير محقّق** — تحقق `to_user = الطرف الآخر في الصداقة`
+3. **عدم تحقق من status الحالي في الـ update** — أضف `.eq("status", "pending")`
