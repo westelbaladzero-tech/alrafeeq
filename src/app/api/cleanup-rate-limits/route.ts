@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase-server";
+import * as crypto from "crypto";
 
 // Cron job: ينظّف سجلات rate_limits القديمة كل ساعة
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  const authHeader = req.headers.get("authorization") || "";
+  const cronSecret = process.env.CRON_SECRET || "";
+  if (!cronSecret || !authHeader) {
+    return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
+  }
+  // مقارنة بزمن ثابت لمنع timing attacks على CRON_SECRET
+  try {
+    const a = crypto.createHash("sha256").update(authHeader).digest();
+    const b = crypto.createHash("sha256").update(`Bearer ${cronSecret}`).digest();
+    if (!crypto.timingSafeEqual(a, b)) {
+      return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
+    }
+  } catch {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }
 

@@ -75,6 +75,9 @@ export async function POST(req: Request) {
     if (!mimeType.startsWith("image/")) {
       return NextResponse.json({ error: "الملف ليس صورة" }, { status: 400 });
     }
+    if (bytes > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "الصورة أكبر من 5 ميجابايت" }, { status: 400 });
+    }
 
     if (!GEMINI_API_KEY) {
       return NextResponse.json({
