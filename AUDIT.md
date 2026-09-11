@@ -312,3 +312,36 @@ await admin.from("profiles")
 - ❌ لا IDOR
 - ❌ لا logic bypass
 - ✅ بس استهلاك quota + تكلفة + prompt injection محتمل
+
+---
+
+## اختبار الثغرات في File Upload Routes (هذه الجلسة)
+
+### mic-test/route.ts — mimeType + size validation 🟡 (commit 5086abd)
+
+**المشكلة:** لا حد لحجم الملف + لا validation على mimeType → استهلاك Gemini quota بملفات ضخمة + ملفات غير صوتية.
+**الإصلاح:**
+```typescript
+if (!mimeType.startsWith("audio/")) return 400;
+if (bytes > 5 * 1024 * 1024) return 400;
+```
+
+### image-text/route.ts — size validation 🟡 (commit 5086abd)
+
+**المشكلة:** لا حد لحجم الصورة (mimeType محقّق سابقاً) → استهلاك quota بصور ضخمة.
+**الإصلاح:** `if (image.size > 5 * 1024 * 1024) return 400`
+
+### upload/route.ts — folder + expiry validation 🟡 (commit 5086abd)
+
+**المشكلة:** `folder` من العميل بلا validation (path traversal محتمل) + `expiry` بلا clamp (قيم متطرفة).
+**ممتاز سابقاً:** `MAX_FILE_SIZE = 4MB` + magic bytes check + ALLOWED types whitelist ✓
+**الإصلاح:**
+```typescript
+const folder = /^[a-zA-Z0-9_-]+$/.test(folderRaw) ? folderRaw : "chat";
+const expiry = Math.max(60, Math.min(86400, expiryRaw));
+```
+
+### ملخص نوعية الثغرات في File Upload routes
+نفس نمط AI routes — ثغرات بسيطة:
+- ❌ لا race conditions / mass assignment / IDOR / logic bypass
+- ✅ بس استهلاك quota + path traversal محتمل
