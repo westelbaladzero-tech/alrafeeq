@@ -284,3 +284,31 @@ await admin.from("profiles")
 - منع `card_full` (لا يقبل الرقم الكامل)
 - `sanitizeText` لكل الحقول + `user_id: userId`
 - DELETE: IDOR محمي `.eq("id", id).eq("user_id", userId)`
+
+---
+
+## اختبار الثغرات في AI/Chat Routes (هذه الجلسة)
+
+### chat/route.ts — validation ناقصة 🟡 (commit 92475af)
+
+**المشكلة (1):** `message` بلا حد للطول — المهاجم يمرر رسالة ميجابايت → استهلاك Gemini quota + تكلفة.
+**الإصلاح:** `if (message.length > 2000) return 400`
+
+**المشكلة (2):** `history` من العميل بلا validation — prompt injection محتمل + استهلاك.
+**الإصلاح:** `if (history && (!Array.isArray(history) || history.length > 20)) return 400`
+
+### tts/route.ts — لا rate limiting 🔴 (commit 92475af)
+
+**المشكلة:** tts ما فيه rate limiting نهائياً — المهاجم يرسل آلاف الطلبات → استهلاك Google TTS quota + تكلفة عالية.
+**الإصلاح:** `rateLimitDB("tts:" + clientId, 10, 60)`
+
+**المشكلة (إضافية):** `rate` من العميل بلا clamp — ممكن 100 أو سالب.
+**الإصلاح:** `const safeRate = Math.max(0.25, Math.min(4.0, Number(rate) || 1.0))`
+
+### ملخص نوعية الثغرات في AI routes
+هذه الثغرات **بسيطة** مقارنة بالـ workflows المالية:
+- ❌ لا race conditions
+- ❌ لا mass assignment
+- ❌ لا IDOR
+- ❌ لا logic bypass
+- ✅ بس استهلاك quota + تكلفة + prompt injection محتمل
