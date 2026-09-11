@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
   // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) ───
   const clientId = getClientId(req as unknown as Request);
-  const rlIp = await rateLimitDB("admin-login:ip:" + clientId, 5, 60);
+  const rlIp = await rateLimitDB("admin-login:ip:" + clientId, 5, 60, true);
   if (!rlIp.allowed) {
     return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
@@ -33,14 +33,14 @@ export async function POST(req: Request) {
   // ─── طبقة 2: Rate limiting على مستوى الإيميل (5/دقيقة) ───
   // يحمي من IP rotation على حساب الأدمن
   if (email) {
-    const rlEmail = await rateLimitDB("admin-login:email:" + email, 5, 60);
+    const rlEmail = await rateLimitDB("admin-login:email:" + email, 5, 60, true);
     if (!rlEmail.allowed) {
       return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
     }
   }
 
   // ─── طبقة 3: قفل تراكمي عبر rateLimitDB (مشترك بين instances) ───
-  const rlLock = await rateLimitDB("admin-lock:" + clientId, MAX_ADMIN_ATTEMPTS, 1800); // 5 محاولات / 30 دقيقة
+  const rlLock = await rateLimitDB("admin-lock:" + clientId, MAX_ADMIN_ATTEMPTS, 1800, true); // 5 محاولات / 30 دقيقة
   if (!rlLock.allowed) {
     return NextResponse.json({ error: "محاولات كثيرة — قُفل 30 دقيقة" }, { status: 423 });
   }

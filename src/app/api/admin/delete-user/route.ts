@@ -29,6 +29,12 @@ export async function POST(req: Request) {
     const { userId } = await req.json();
     if (!userId) return NextResponse.json({ error: "معرف المستخدم مطلوب" }, { status: 400 });
 
+    // ─── تحقق من إن userId هو UUID صالح (منع SQL injection في .or()) ───
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(String(userId))) {
+      return NextResponse.json({ error: "معرف غير صالح" }, { status: 400 });
+    }
+
     const admin = getAdminClient();
     if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 

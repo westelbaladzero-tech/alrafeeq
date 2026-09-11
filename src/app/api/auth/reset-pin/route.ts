@@ -7,7 +7,7 @@ import * as crypto from "crypto";
 export async function POST(req: NextRequest) {
   // ─── Rate limiting (5/دقيقة لكل IP) ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = await rateLimitDB("reset-pin:ip:" + clientId, 5, 60);
+  const rl = await rateLimitDB("reset-pin:ip:" + clientId, 5, 60, true);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }

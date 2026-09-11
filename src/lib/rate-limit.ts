@@ -11,10 +11,13 @@ interface RateEntry {
 const store: Map<string, RateEntry> = new Map();
 
 // ─── Rate limiting عبر قاعدة البيانات (يعمل بين كل instances) ───
+// strict=false (افتراضي): fail-open (يسمح عند الخطأ — مناسب للمسارات العامة)
+// strict=true: fail-closed (يرفض عند الخطأ — لازم للمسارات الحساسة زي login/admin)
 export async function rateLimitDB(
   identifier: string,
   limit: number = 10,
-  windowSeconds: number = 60
+  windowSeconds: number = 60,
+  strict: boolean = false
 ): Promise<{ allowed: boolean; remaining: number }> {
   const admin = getAdminClient();
   if (!admin) {
@@ -30,7 +33,11 @@ export async function rateLimitDB(
 
   if (error) {
     console.error("rateLimitDB error:", error);
-    // fail open — خلّي الطلب يمر (أفضل من حظر المستخدمين الشرعيين)
+    if (strict) {
+      // fail-closed: ارفض الطلب (أمان الأولوية على التوفر)
+      return { allowed: false, remaining: 0 };
+    }
+    // fail-open: خلّي الطلب يمر (أفضل من حظر المستخدمين الشرعيين)
     return { allowed: true, remaining: limit - 1 };
   }
 

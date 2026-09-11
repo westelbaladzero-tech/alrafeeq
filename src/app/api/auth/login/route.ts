@@ -26,15 +26,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: UNIFORM_ERROR }, { status: 401 });
   }
 
-  // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) ───
+  // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) — strict ───
   const clientId = getClientId(req as unknown as Request);
-  const rlIp = await rateLimitDB("login:ip:" + clientId, 5, 60);
+  const rlIp = await rateLimitDB("login:ip:" + clientId, 5, 60, true);
   if (!rlIp.allowed) {
     return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
-  // ─── طبقة 2: Rate limiting على مستوى الهاتف (5/دقيقة) ───
-  const rlPhone = await rateLimitDB("login:phone:" + phone, 5, 60);
+  // ─── طبقة 2: Rate limiting على مستوى الهاتف (5/دقيقة) — strict ───
+  const rlPhone = await rateLimitDB("login:phone:" + phone, 5, 60, true);
   if (!rlPhone.allowed) {
     return NextResponse.json({ error: "محاولات كثيرة — انتظر دقيقة" }, { status: 429 });
   }

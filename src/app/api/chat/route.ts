@@ -239,6 +239,11 @@ export async function POST(req: NextRequest) {
     userEmail = user?.email || null;
   }
 
+  // ─── مصادقة إلزامية — لازم يكون فيه userId موثّق ───
+  if (!userId) {
+    return NextResponse.json({ error: "غير مصرّح — سجّل الدخول أولًا" }, { status: 401 });
+  }
+
   // اجلب الملف الشخصي
   let userName = userEmail ? userEmail.split("@")[0].split(".")[0] : "صاحبي";
   let userWorkType = "";

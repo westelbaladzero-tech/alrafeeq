@@ -7,7 +7,7 @@ import { trackUsage } from "@/lib/usage";
 export async function POST(req: NextRequest) {
   // ─── Rate limiting (3/دقيقة لكل IP) ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = await rateLimitDB("register:ip:" + clientId, 3, 60);
+  const rl = await rateLimitDB("register:ip:" + clientId, 3, 60, true);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Rate limiting لكل إيميل (1/10 دقائق) ───
-  const rlEmail = await rateLimitDB("register:email:" + email, 1, 600);
+  const rlEmail = await rateLimitDB("register:email:" + email, 1, 600, true);
   if (!rlEmail.allowed) {
     return NextResponse.json({ error: "تم إرسال رابط التأكيد. تحقق من بريدك" }, { status: 429 });
   }
