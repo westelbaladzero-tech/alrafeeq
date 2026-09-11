@@ -425,3 +425,36 @@ await admin.from("debt_requests")
 - حد طول URL
 - فقط المرسل يرفع الإيصال
 - تحقق من الحالة والصلاحية
+
+---
+
+## AI Supporting + Maintenance Batch (إغلاق التغطية الكاملة)
+
+### receipt-test/route.ts — size validation 🟡 (commit 8a3d728)
+
+**المشكلة:** لا حد لحجم الصورة (مثل الثغرة القديمة في mic-test/image-text) → استهلاك Gemini quota بصور ضخمة.
+**الإصلاح:** `if (bytes > 5 * 1024 * 1024) return 400`
+
+### cleanup-rate-limits/route.ts — timingSafeEqual للـ CRON_SECRET 🟡 (commit 8a3d728)
+
+**المشكلة:** مقارنة CRON_SECRET كانت مقارنة نصية مباشرة:
+```typescript
+authHeader !== `Bearer ${cronSecret}`
+```
+هذا يفتح timing attack محتمل على سرّ الـ cron.
+
+**الإصلاح:** hash + `crypto.timingSafeEqual`:
+```typescript
+const a = crypto.createHash("sha256").update(authHeader).digest();
+const b = crypto.createHash("sha256").update(`Bearer ${cronSecret}`).digest();
+crypto.timingSafeEqual(a, b)
+```
+
+### إغلاق التغطية ✅
+بهذا الـ batch، تمت مراجعة **كل الـ 31 route** في `src/app/api`:
+- ✅ Security review
+- ✅ Workflow logic review
+- ✅ Fixes applied where needed
+- ✅ Documentation updated in AUDIT.md
+
+**التطبيق الآن مغطى بالكامل على مستوى Routes + DB Functions + RLS + Workflow Logic.**
