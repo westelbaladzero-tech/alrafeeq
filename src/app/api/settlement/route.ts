@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
 
-  const { to_user, friendship_id, amount, description, linked_debt_id, status } = await req.json();
+  const { to_user, friendship_id, amount, description, linked_debt_id, status, category } = await req.json();
 
   if (!to_user || !friendship_id || !amount) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     friendship_id,
     amount: amt.value,
     description: description ? sanitizeText(description, 200) : null,
+    category: category || "debt",
     linked_debt_id: linked_debt_id || null,
     status: status || "pending",
   }).select("id").single();

@@ -64,9 +64,14 @@ $$ language plpgsql security definer;
 revoke execute on function public.record_gam3eya_turn
   from anon, authenticated;
 
--- 4) تريغر: سجّل دور الجمعية تلقائياً عند تأكيد التسوية
+-- 4) عمود صريح لنوع التسوية (بدل الاعتماد على نص حر بالوصف)
+alter table public.settlements
+  add column if not exists category text default 'debt'
+  check (category in ('debt', 'installment', 'gam3eya'));
+
+-- 5) تريغر: سجّل دور الجمعية تلقائياً عند تأكيد التسوية
 -- يشتغل AFTER UPDATE لما status ينتقل لـ "confirmed"
--- مو محتاج أي تعديل على العميل ولا على الـ routes
+-- يفحص category = 'gam3eya' (عمود صريح، مو نص حر)
 create or replace function public.handle_gam3eya_turn_on_settlement()
 returns trigger as $$
 declare
@@ -83,8 +88,8 @@ begin
 
     -- هل هي جمعية فعّالة؟ (relationship_type = association AND فيه عدد أدوار)
     if v_relationship_type = 'association' and v_gam3eya_total is not null then
-      -- هل التسوية مرتبطة بجمعية؟ (فحص الوصف)
-      if NEW.description is not null and NEW.description like '%جمعية%' then
+      -- هل التسوية مرتبطة بجمعية؟ (فحص بنيوي — عمود صريح)
+      if NEW.category = 'gam3eya' then
         -- سجّل الدور — to_user هو اللي استلم (أخذ دوره)
         -- الـ RPC نفسه يمنع التكرار (UNIQUE constraint)
         perform public.record_gam3eya_turn(

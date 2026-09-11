@@ -1224,6 +1224,7 @@ export default function FriendsView() {
           friendship_id: chatFriend.friendship_id,
           amount: amt,
           description: (settleCategory === "debt" ? "دين" : settleCategory === "installment" ? "قسط" : "جمعية") + (settleDesc ? " — " + settleDesc : ""),
+          category: settleCategory,
           linked_debt_id: p2pSelectedItem?.id || null,
           status: "pending",
         }),
@@ -1679,8 +1680,8 @@ export default function FriendsView() {
             }
             // أنشئ سند هرمي موثّق + رسالة في الشات
             if (sett.friendship_id) {
-              const cat = sett.description && sett.description.includes("قسط") ? "installment" :
-                          sett.description && sett.description.includes("جمعية") ? "gam3eya" : "debt";
+              const cat = sett.category || (sett.description && sett.description.includes("قسط") ? "installment" :
+                          sett.description && sett.description.includes("جمعية") ? "gam3eya" : "debt");
               try {
                 const sanadRes = await fetch("/api/sanad", {
                   method: "POST",
@@ -1781,6 +1782,7 @@ export default function FriendsView() {
           friendship_id: selectedFriend.friendship_id,
           amount: amt,
           description: settleDesc || null,
+          category: settleCategory,
           status: "pending",
         }),
       });
