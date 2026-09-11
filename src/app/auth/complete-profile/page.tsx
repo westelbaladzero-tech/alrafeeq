@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Phone, Lock, Check, Wallet } from "lucide-react";
+import { Phone, Lock, Check, Shield } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
-import { KEYS } from "@/lib/keys";
+import AuthShell from "@/components/AuthShell";
+import AuthInput from "@/components/AuthInput";
 
 function CompleteInner() {
   const params = useSearchParams();
@@ -12,7 +13,7 @@ function CompleteInner() {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("waiting"); // waiting → form → done
+  const [status, setStatus] = useState("waiting");
   const [err, setErr] = useState("");
   const [email, setEmail] = useState("");
   const [authErr, setAuthErr] = useState("");
@@ -21,27 +22,19 @@ function CompleteInner() {
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
-    
     async function init() {
       const sb = getSupabase();
       if (!sb) { router.replace("/auth/login"); return; }
-
-      // انتظر قليلاً ليكتشف المتصفّح الجلسة من الرابط تلقائياً
       await new Promise(r => setTimeout(r, 500));
-
       const { data: { user } } = await sb.auth.getUser();
-      if (!user) { 
-        setAuthErr("لم يتم تأكيد الإيميل. تأكد من فتح الرابط من نفس المتصفّح");
-        setStatus("error"); 
-        return; 
+      if (!user) {
+        setAuthErr("لم يتم تأكيد الإيميل. افتح الرابط من الرسالة مرة ثانية");
+        setStatus("error");
+        return;
       }
       setEmail(user.email || "");
-
-      // تحقق: الملف موجود؟
-      const { data: profile } = await sb
-        .from("profiles").select("id").eq("id", user.id).maybeSingle();
+      const { data: profile } = await sb.from("profiles").select("id").eq("id", user.id).maybeSingle();
       if (profile) { router.replace("/"); return; }
-
       setStatus("form");
     }
     init();
@@ -53,13 +46,11 @@ function CompleteInner() {
     if (!phone) { setErr("أدخل رقم الهاتف"); return; }
     if (pin.length < 4) { setErr("الرمز يجب أن يكون 4 خانات على الأقل"); return; }
     if (pin !== confirmPin) { setErr("الرمزان غير متطابقين"); return; }
-
     setLoading(true);
     try {
       const sb = getSupabase();
       const { data: { session } } = await sb!.auth.getSession();
       if (!session) { setErr("انتهت الجلسة. أعد التسجيل"); setLoading(false); return; }
-
       const res = await fetch("/api/auth/complete-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,22 +59,6 @@ function CompleteInner() {
       const data = await res.json();
       setLoading(false);
       if (data.error) { setErr(data.error); return; }
-
-      // خزّن المعرّفات محليًا بعد نجاح إنشاء الحساب
-      if (typeof window !== "undefined") {
-        const sb = getSupabase();
-        if (sb) {
-          const { data: { user } } = await sb.auth.getUser();
-          if (user) {
-            localStorage.setItem(KEYS.userId, user.id);
-            if (data.clientId) {
-              localStorage.setItem(KEYS.clientId, data.clientId);
-            }
-          }
-        }
-      }
-
-      // لا نخزّن PIN — سيُطلب داخل التطبيق عند إنشاء المفتاح
       setStatus("done");
       setTimeout(() => { window.location.href = "/"; }, 1500);
     } catch {
@@ -92,75 +67,55 @@ function CompleteInner() {
     }
   }
 
-  if (status === "waiting")
-    return <div className="flex items-center justify-center h-screen text-gray-400">جاري تأكيد الإيميل...</div>;
-
+  if (status === "waiting") return <div className="flex items-center justify-center h-screen text-gray-400">جاري تأكيد الإيميل...</div>;
   if (status === "error") {
     return (
-      <main className="min-h-screen flex items-center justify-center p-5">
-        <div className="text-center max-w-sm">
-          <div className="text-red-500 text-lg font-bold mb-2">خطأ</div>
-          <p className="text-gray-500 mb-4">{authErr}</p>
-          <a href="/auth/register" className="text-[var(--accent)] font-bold">حاول مرة أخرى</a>
-        </div>
-      </main>
+      <AuthShell eyebrow="تعذّر التأكيد" title="الرابط محتاج محاولة جديدة." description={authErr}>
+        <a href="/auth/register" className="text-[var(--accent)] font-bold block text-center">حاول مرة أخرى</a>
+      </AuthShell>
     );
   }
-
   if (status === "done") {
     return (
-      <main className="min-h-screen flex items-center justify-center p-5">
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <Check size={32} className="text-green-600" />
-          </div>
-          <h2 className="text-xl font-bold">تم إنشاء حسابك!</h2>
-          <p className="text-gray-500 mt-2">جاري تحويلك للتطبيق...</p>
-        </div>
-      </main>
+      <AuthShell eyebrow="تم بنجاح" title="حسابك بقى جاهز." description="ثواني قليلة ونحوّلك للرفيق.">
+        <div className="text-center text-green-700 font-semibold">تم إنشاء حسابك بنجاح ✨</div>
+      </AuthShell>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-5">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-3xl bg-[var(--soft)] flex items-center justify-center mx-auto mb-3">
-            <Wallet size={28} className="text-[var(--accent)]" />
-          </div>
-          <h1 className="text-2xl font-bold">أكمل بياناتك</h1>
-          <p className="text-sm text-gray-500">مرحباً {email}</p>
-          <p className="text-xs text-gray-400 mt-1">اربط رقم هاتفك ورمز الحماية</p>
+    <AuthShell eyebrow="تأكيد وربط" title="خلّينا نربط بياناتك مرة واحدة." description={`مرحباً ${email} — ضيف رقم الهاتف والرمز السري عشان يبقى دخولك سهل بعد كده.`}>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="text-[var(--accent)] text-sm font-semibold">الخطوة الثانية</div>
+          <h2 className="text-xl font-bold text-[#16342d]">أكمل بياناتك</h2>
         </div>
-        <form onSubmit={submit} className="space-y-3">
-          <div className="relative">
-            <Phone size={18} className="absolute right-3 top-3.5 text-gray-300" />
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="رقم الهاتف" required
-              className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
-          </div>
-          <div className="relative">
-            <Lock size={18} className="absolute right-3 top-3.5 text-gray-300" />
-            <input type="password" value={pin} onChange={e => setPin(e.target.value)} placeholder="رمز الحماية (4 خانات)" maxLength={8} required
-              className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
-          </div>
-          <div className="relative">
-            <Lock size={18} className="absolute right-3 top-3.5 text-gray-300" />
-            <input type="password" value={confirmPin} onChange={e => setConfirmPin(e.target.value)} placeholder="تأكيد الرمز" required
-              className="w-full bg-gray-50 rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-green-100" />
-          </div>
-          {err && <div className="text-red-500 text-sm text-center">{err}</div>}
-          <button type="submit" disabled={loading}
-            className="w-full rounded-2xl bg-[var(--accent)] text-white py-3 flex items-center justify-center gap-2 font-bold disabled:opacity-50">
-            <Check size={18} /> {loading ? "جاري الربط..." : "ربط البيانات"}
-          </button>
-        </form>
+        <div className="w-11 h-11 rounded-2xl bg-[var(--accent)] text-white flex items-center justify-center shadow-sm">
+          <Shield size={20} />
+        </div>
       </div>
-    </main>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label className="text-sm font-semibold text-[#36534c] mb-2 block">رقم الهاتف</label>
+          <AuthInput icon={<Phone size={18} />} type="tel" placeholder="01050909821" value={phone} onChange={setPhone} required />
+        </div>
+        <div>
+          <label className="text-sm font-semibold text-[#36534c] mb-2 block">الرمز السري</label>
+          <AuthInput icon={<Lock size={18} />} type="password" placeholder="••••" value={pin} onChange={setPin} highlighted required maxLength={8} />
+        </div>
+        <div>
+          <label className="text-sm font-semibold text-[#36534c] mb-2 block">تأكيد الرمز</label>
+          <AuthInput icon={<Lock size={18} />} type="password" placeholder="••••" value={confirmPin} onChange={setConfirmPin} highlighted required maxLength={8} />
+        </div>
+        {err && <div className="text-red-500 text-sm text-center">{err}</div>}
+        <button type="submit" disabled={loading} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3.5 flex items-center justify-center gap-2 font-bold disabled:opacity-50 shadow-sm">
+          <Check size={18} /> {loading ? "جاري الربط..." : "ربط البيانات"}
+        </button>
+      </form>
+    </AuthShell>
   );
 }
 
 export default function CompleteProfilePage() {
-  return <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-400">جاري التحميل...</div>}>
-    <CompleteInner />
-  </Suspense>;
+  return <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-400">جاري التحميل...</div>}><CompleteInner /></Suspense>;
 }

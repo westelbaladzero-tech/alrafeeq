@@ -1,102 +1,69 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Mail, Shield, ArrowLeft, Check } from "lucide-react";
+import { Mail, Send } from "lucide-react";
+import { getSupabase } from "@/lib/supabase";
+import AuthShell from "@/components/AuthShell";
+import AuthInput from "@/components/AuthInput";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [sent, setSent] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setErr("");
+    setErr(""); setMsg("");
+    if (!email) { setErr("أدخل الإيميل"); return; }
     setLoading(true);
-
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+    const sb = getSupabase();
+    if (!sb) { setLoading(false); setErr("خطأ إعداد"); return; }
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/complete-profile` },
     });
-    const data = await res.json();
     setLoading(false);
-
-    if (data.error) { setErr(data.error); return; }
-    setDone(true);
-  }
-
-  if (done) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-6">
-        <div className="text-center max-w-sm w-full">
-          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <Check size={32} className="text-green-600" />
-          </div>
-          <h2 className="text-xl font-bold mb-2">رابط التحقق في طريقك</h2>
-          <p className="text-gray-500 text-sm leading-relaxed">
-            أرسلنا رابط تأكيد إلى <span className="font-bold text-[var(--accent)]">{email}</span>.
-            افتح الرابط من نفس المتصفح لإكمال بياناتك.
-          </p>
-          <button onClick={() => router.push("/auth/login")}
-            className="mt-6 text-[var(--accent)] font-bold text-sm">
-            العودة لتسجيل الدخول
-          </button>
-        </div>
-      </main>
-    );
+    if (error) {
+      setErr(error.message.includes("rate") ? "تم تجاوز حد الإرسال. انتظر دقائق" : error.message);
+      return;
+    }
+    setSent(true);
+    setMsg("تم إرسال رابط التأكيد إلى إيميلك. افتح الرسالة واضغط الرابط لإكمال التسجيل.");
   }
 
   return (
-    <main className="min-h-screen flex flex-col p-6 relative overflow-hidden">
-      <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full bg-[var(--soft)] opacity-60" />
-
-      <div className="relative w-full max-w-sm mx-auto flex-1 flex flex-col justify-center">
-        <button onClick={() => router.push("/")}
-          className="flex items-center gap-1 text-[var(--muted)] text-sm mb-6 self-start">
-          <ArrowLeft size={16} /> الرئيسية
-        </button>
-
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <p className="text-sm text-[var(--accent)] mb-1">انضم للرفيق الأمين</p>
-            <h1 className="text-2xl font-bold text-[var(--accent-dark)]">حساب جديد</h1>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center">
-            <Shield size={24} className="text-white" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl p-5 shadow-[var(--shadow-lg)] border border-[var(--soft)]">
-          <p className="text-sm text-gray-500 mb-4 leading-relaxed">
-            أدخل بريدك الإلكتروني، وسنرسل لك رابط تأكيد لإكمال بياناتك.
-          </p>
-          <form onSubmit={submit} className="space-y-3">
-            <div>
-              <label className="text-xs text-[var(--muted)] mb-1 block">البريد الإلكتروني</label>
-              <div className="relative">
-                <Mail size={18} className="absolute right-3 top-3.5 text-[var(--accent)]" />
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="email@example.com" required
-                  dir="ltr" lang="en" inputMode="email"
-                  className="w-full bg-[var(--bg-warm)] rounded-2xl pr-10 pl-4 py-3 outline-none focus:ring-2 focus:ring-[var(--soft)] text-sm text-left" />
-              </div>
-            </div>
-
-            {err && <div className="text-red-500 text-sm text-center bg-red-50 rounded-xl py-2">{err}</div>}
-
-            <button type="submit" disabled={loading}
-              className="w-full rounded-2xl bg-[var(--accent)] text-white py-3.5 font-bold disabled:opacity-50 text-sm">
-              {loading ? "جاري الإرسال..." : "أرسل رابط التحقق"}
-            </button>
-          </form>
-        </div>
-
-        <p className="text-center text-xs text-[var(--muted)] mt-4">
-          بتسجيلك توافق على شروط الاستخدام وسياسة الخصوصية
-        </p>
+    <AuthShell
+      eyebrow="بداية هادئة وآمنة"
+      title="ابدأ بالإيميل، ونكمل الباقي معًا."
+      description="هنبعت لك رابط تأكيد على بريدك، وبعدها تربط رقم الهاتف والرمز السري في خطوة واحدة بسيطة."
+    >
+      <div className="mb-4">
+        <div className="text-[var(--accent)] text-sm font-semibold">خطوة أولى</div>
+        <h2 className="text-xl font-bold text-[#16342d]">تسجيل جديد</h2>
       </div>
-    </main>
+
+      {sent ? (
+        <div className="text-center space-y-4">
+          <div className="bg-green-50 rounded-2xl p-5 text-green-700 text-sm leading-7">{msg}</div>
+          <a href="/auth/login" className="text-[var(--accent)] font-bold block">العودة لتسجيل الدخول</a>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="text-sm font-semibold text-[#36534c] mb-2 block">البريد الإلكتروني</label>
+            <AuthInput icon={<Mail size={18} />} type="email" placeholder="name@example.com" value={email} onChange={setEmail} required />
+          </div>
+          {err && <div className="text-red-500 text-sm text-center">{err}</div>}
+          <button type="submit" disabled={loading} className="w-full rounded-2xl bg-[var(--accent)] text-white py-3.5 flex items-center justify-center gap-2 font-bold disabled:opacity-50 shadow-sm">
+            <Send size={18} /> {loading ? "جاري الإرسال..." : "إرسال رابط التأكيد"}
+          </button>
+        </form>
+      )}
+
+      <a href="/auth/login" className="w-full text-center text-sm text-gray-500 mt-4 block">
+        لديك حساب؟ <span className="text-[var(--accent)] font-bold">سجل دخول</span>
+      </a>
+    </AuthShell>
   );
 }
