@@ -7,7 +7,7 @@ import * as crypto from "crypto";
 export async function POST(req: NextRequest) {
   // ─── Rate limiting (5/دقيقة لكل IP) ───
   const clientId = getClientId(req as unknown as Request);
-  const rl = await rateLimitDB("complete-profile:ip:" + clientId, 5, 60);
+  const rl = await rateLimitDB("complete-profile:ip:" + clientId, 5, 60, true);
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
@@ -48,14 +48,14 @@ export async function POST(req: NextRequest) {
   const pinHash = crypto.scryptSync(pin, user.email, 64).toString("hex");
 
   // معرف العميل — فريد لكل مستخدم
-  const clientId = crypto.randomUUID();
+  const profileClientId = crypto.randomUUID();
 
   // أنشئ الملف (مع client_id)
   const { error } = await admin.from("profiles").insert({
     id: user.id, email: user.email, phone,
     pin_hash: pinHash, email_verified: true,
     failed_attempts: 0, locked_until: null,
-    client_id: clientId,
+    client_id: profileClientId,
   });
 
   // لو فشل بسبب عدم وجود عمود client_id → أعد المحاولة بدونه
@@ -70,5 +70,5 @@ export async function POST(req: NextRequest) {
   }
 
   if (error) return NextResponse.json({ error: "تعذر حفظ البيانات" }, { status: 500 });
-  return NextResponse.json({ ok: true, message: "تم ربط البيانات", clientId });
+  return NextResponse.json({ ok: true, message: "تم ربط البيانات", clientId: profileClientId });
 }
