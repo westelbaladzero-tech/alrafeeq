@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminClient, getServerClient } from "@/lib/supabase-server";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
+import { validatePin } from "@/lib/validation";
 import * as crypto from "crypto";
 
 export async function POST(req: NextRequest) {
-  const { pin, accessToken } = await req.json();
-  if (!pin || pin.length < 4) {
+  // ─── Rate limiting (5/دقيقة لكل IP) ───
+  const clientId = getClientId(req as unknown as Request);
+  const rl = await rateLimitDB("reset-pin:ip:" + clientId, 5, 60);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
+  }
+
+  const { pin, accessToken } = await req.json().catch(() => ({}));
+  if (!pin || !validatePin(pin)) {
     return NextResponse.json({ error: "الرمز يجب أن يكون 4 خانات على الأقل" }, { status: 400 });
   }
 
