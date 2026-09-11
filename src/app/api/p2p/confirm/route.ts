@@ -73,7 +73,20 @@ export async function POST(req: NextRequest) {
   }
 
   // المستلم أكّد ← اكتملت المعاملة
-  // 1. أنشئ رسالة السند في جدول messages
+  // 1. atomic lock: حاول تحديث الحالة لـ "settled" (لو status = verifying)
+  // يمنع race condition: لو طلبان متزامنان، واحد ينجح، الثاني يفشل قبل الـ side effects
+  const { data: locked } = await admin.from("p2p_transactions")
+    .update({ status: "settled" })
+    .eq("id", transaction_id)
+    .eq("status", "verifying")
+    .select("id");
+
+  if (!locked || locked.length === 0) {
+    // الـ update ما أثر على أي صف — معاملة تم تأكيدها بالفعل أو ليست في حالة verifying
+    return NextResponse.json({ error: "تعذّر تأكيد المعاملة — قد تكون مكتملة" }, { status: 409 });
+  }
+
+  // 2. الآن بأمان نفّذ الـ side effects (مرة وحدة فقط لأن الحالة قفلت)
   let sanadMessageId = null;
   if (txn.friendship_id) {
     const { data: msg } = await admin.from("messages").insert({
@@ -86,7 +99,7 @@ export async function POST(req: NextRequest) {
     sanadMessageId = msg?.id || null;
   }
 
-  // 2. سوّ الدين تلقائياً لو مربوط بدين
+  // 3. سوّ الدين تلقائياً لو مربوط بدين
   if (txn.debt_request_id) {
     await admin.rpc("settle_debt_from_p2p", {
       p_debt_id: txn.debt_request_id,
@@ -97,17 +110,18 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 3. أنشئ السند + حدّث الحالة
+  // 4. أنشئ السند
   await admin.rpc("create_p2p_sanad", {
     p_transaction_id: transaction_id,
     p_message_id: sanadMessageId,
   });
 
-  // 4. لو لم تُستدعَ الدالة (لا يوجد sanad_message_id) ← حدّث يدوياً
-  await admin.from("p2p_transactions")
-    .update({ status: "settled", sanad_message_id: sanadMessageId })
-    .eq("id", transaction_id)
-    .eq("status", "verifying");
+  // 5. حدّث sanad_message_id (الحالة قفلت بالفعل في الخطوة 1)
+  if (sanadMessageId) {
+    await admin.from("p2p_transactions")
+      .update({ sanad_message_id: sanadMessageId })
+      .eq("id", transaction_id);
+  }
 
   return NextResponse.json({
     ok: true,

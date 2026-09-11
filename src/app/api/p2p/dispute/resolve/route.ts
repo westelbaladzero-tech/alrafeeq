@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   // اجلب المعاملة
   const { data: txn } = await admin.from("p2p_transactions")
-    .select("id, from_user, to_user, status, dispute_deadline")
+    .select("id, from_user, to_user, status, dispute_deadline, dispute_opened_by")
     .eq("id", transaction_id).single();
 
   if (!txn) {
@@ -43,6 +43,12 @@ export async function POST(req: NextRequest) {
   // تحقق أن المعاملة منازعة
   if (txn.status !== "disputed") {
     return NextResponse.json({ error: "المعاملة ليست محل نزاع" }, { status: 400 });
+  }
+
+  // تحقق من إن المستخدم هو الطرف الآخر (مو اللي فتح النزاع)
+  // يمنع التلاعب: المرسل ما يقدر يفتح نزاع ثم يحله بـ accept (refunded) لنفسه
+  if (txn.dispute_opened_by && txn.dispute_opened_by === userId) {
+    return NextResponse.json({ error: "لا يمكنك حل نزاعك الخاص — الطرف الآخر فقط يحل النزاع" }, { status: 403 });
   }
 
   // تحقق من مهلة الحل

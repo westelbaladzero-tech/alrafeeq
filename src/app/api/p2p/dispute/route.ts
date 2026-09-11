@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
       status: "disputed",
       dispute_reason: sanitizeText(reason, 500),
       dispute_deadline: new Date(Date.now() + 7 * 24 * 3600000).toISOString(),
+      dispute_opened_by: userId,
     })
     .eq("id", transaction_id);
 
