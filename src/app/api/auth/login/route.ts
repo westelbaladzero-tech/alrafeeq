@@ -69,19 +69,26 @@ export async function POST(req: NextRequest) {
   const pinMatch = inputBuf.length === storedBuf.length && crypto.timingSafeEqual(inputBuf, storedBuf);
 
   if (!pinMatch) {
-    const attempts = (profile.failed_attempts || 0) + 1;
-    const updates: any = { failed_attempts: attempts };
-    if (attempts >= MAX_ATTEMPTS) {
-      updates.locked_until = new Date(Date.now() + LOCK_MINUTES * 60000).toISOString();
-      updates.failed_attempts = 0;
-      await admin.from("profiles").update(updates).eq("phone", phone);
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < FIXED_DELAY_MS) await sleep(FIXED_DELAY_MS - elapsed);
-      return NextResponse.json({ error: `محاولات خاطئة كثيرة. تم قفل الحساب ${LOCK_MINUTES} دقيقة` }, { status: 423 });
-    }
-    await admin.from("profiles").update(updates).eq("phone", phone);
+    const currentAttempts = profile.failed_attempts || 0;
+    const newAttempts = currentAttempts + 1;
+    const shouldLock = newAttempts >= MAX_ATTEMPTS;
+
+    // optimistic lock: حدّث فقط لو failed_attempts ما تغيّر
+    // يمنع race condition في PIN brute force (طلبات متزامنة لا تتجاوز القفل)
+    const updates: any = {
+      failed_attempts: shouldLock ? 0 : newAttempts,
+      ...(shouldLock ? { locked_until: new Date(Date.now() + LOCK_MINUTES * 60000).toISOString() } : {}),
+    };
+    await admin.from("profiles")
+      .update(updates)
+      .eq("phone", phone)
+      .eq("failed_attempts", currentAttempts);
+
     const elapsed = Date.now() - startedAt;
     if (elapsed < FIXED_DELAY_MS) await sleep(FIXED_DELAY_MS - elapsed);
+    if (shouldLock) {
+      return NextResponse.json({ error: `محاولات خاطئة كثيرة. تم قفل الحساب ${LOCK_MINUTES} دقيقة` }, { status: 423 });
+    }
     return NextResponse.json({ error: UNIFORM_ERROR }, { status: 401 });
   }
 

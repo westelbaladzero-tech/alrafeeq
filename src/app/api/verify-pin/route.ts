@@ -19,9 +19,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "البيانات ناقصة" }, { status: 400 });
   }
 
-  // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) ───
+  // ─── طبقة 1: Rate limiting على مستوى IP (5/دقيقة) — strict ───
   const clientId = getClientId(req as unknown as Request);
-  const rlIp = await rateLimitDB("pin:ip:" + clientId, 5, 60);
+  const rlIp = await rateLimitDB("pin:ip:" + clientId, 5, 60, true);
   if (!rlIp.allowed) {
     return NextResponse.json(
       { error: "محاولات كثيرة — انتظر دقيقة" },
@@ -29,10 +29,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ─── طبقة 2: Rate limiting على مستوى الحساب (5/دقيقة) ───
+  // ─── طبقة 2: Rate limiting على مستوى الحساب (5/دقيقة) — strict ───
   // يحمي من IP rotation على حساب معيّن
   const targetId = userId || accessToken || clientId;
-  const rlUser = await rateLimitDB("pin:user:" + targetId, 5, 60);
+  const rlUser = await rateLimitDB("pin:user:" + targetId, 5, 60, true);
   if (!rlUser.allowed) {
     return NextResponse.json(
       { error: "محاولات كثيرة على هذا الحساب — انتظر دقيقة" },
