@@ -251,3 +251,36 @@ auth.users (Supabase Auth)
 1. **status من العميل (mass assignment)** — تجاهل status، status الافتراضي "pending"
 2. **to_user غير محقّق** — تحقق `to_user = الطرف الآخر في الصداقة`
 3. **عدم تحقق من status الحالي في الـ update** — أضف `.eq("status", "pending")`
+
+---
+
+## اختبار الثغرات المنطقية في Auth Workflow (هذه الجلسة)
+
+### auth/login — PIN brute force race condition 🔴🔴 (commit a32e815)
+
+**المشكلة:** عدّاد المحاولات الفاشلة ما كان محميًا بـ optimistic lock.
+- المهاجم يرسل 10 طلبات متزامنة بـ PIN خاطئ
+- كل طلب يقرأ `failed_attempts = 0` (نفس القيمة)
+- كل طلب يحدّث `failed_attempts = 1` (مو 10!)
+- **القفل التراكمي (MAX_ATTEMPTS=5) ما يتفعل → PIN brute بآلاف المحاولات!**
+
+**الإصلاح:** optimistic lock في الـ update:
+```typescript
+await admin.from("profiles")
+  .update(updates)
+  .eq("phone", phone)
+  .eq("failed_attempts", currentAttempts);  // ← الحامي
+```
+لو طلب آخر سبق وحدّث العدّاد، الـ update يفشل (0 صفوف) → الرد الموحّد يخفي الحالة.
+
+### verify-pin — strict rate limiting 🔴 (commit a32e815)
+
+**المشكلة:** `verify-pin` استخدم `rateLimitDB(..., 5, 60)` بدون `strict=true` (fail-open). `auth/login` استخدم `strict=true` (fail-closed). عدم اتساق — `verify-pin` مسار حساس ويقبل الطلبات عند فشل rate limiting.
+
+**الإصلاح:** أضف `true` للطبقتين (IP + user) — consistency مع `auth/login`.
+
+### payment-methods POST/DELETE — سليم ✅
+- POST: validation كامل لكل نوع (wallet regex، instapay @، card_type/last_four، bank_name)
+- منع `card_full` (لا يقبل الرقم الكامل)
+- `sanitizeText` لكل الحقول + `user_id: userId`
+- DELETE: IDOR محمي `.eq("id", id).eq("user_id", userId)`
