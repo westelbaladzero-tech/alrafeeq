@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { trackUsage } from "@/lib/usage";
 import { getAuthUserId } from "@/lib/auth-server";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 
 // مفاتيح Google Cloud TTS (نفس مفتاح Gemini أو مفتاح منفصل)
 const GOOGLE_TTS_KEY =
@@ -29,6 +30,13 @@ const EN_VOICES = {
 
 export async function POST(req: NextRequest) {
   try {
+    // ─── Rate limiting: 10 طلبات/دقيقة ───
+    const clientId = getClientId(req as unknown as Request);
+    const rl = await rateLimitDB("tts:" + clientId, 10, 60);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
+    }
+
     const userId = await getAuthUserId(req);
     if (!userId) {
       return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
@@ -36,6 +44,9 @@ export async function POST(req: NextRequest) {
 
     const { text, lang = "ar-XA", voice = "female", rate = 1.0 } =
       await req.json();
+
+    // clamp rate بين 0.25 و 4.0 (منع قيم متطرفة)
+    const safeRate = Math.max(0.25, Math.min(4.0, Number(rate) || 1.0));
 
     if (!text || text.length > 5000) {
       return NextResponse.json(
@@ -77,7 +88,7 @@ export async function POST(req: NextRequest) {
           },
           audioConfig: {
             audioEncoding: "MP3",
-            speakingRate: rate,
+            speakingRate: safeRate,
             pitch: 0,
             volumeGainDb: 0,
           },

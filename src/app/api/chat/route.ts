@@ -227,6 +227,12 @@ export async function POST(req: NextRequest) {
 
   const { message, accessToken, history } = await req.json();
   if (!message) return NextResponse.json({ error: "رسالة فارغة" }, { status: 400 });
+  if (typeof message !== "string" || message.length > 2000) {
+    return NextResponse.json({ error: "الرسالة طويلة جداً (حد 2000 حرف)" }, { status: 400 });
+  }
+  if (history && (!Array.isArray(history) || history.length > 20)) {
+    return NextResponse.json({ error: "سجل المحادثة غير صالح أو كبير جداً" }, { status: 400 });
+  }
 
   const sb = getServerClient();
   if (!sb) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
