@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getAdminClient } from "@/lib/supabase-server";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -23,6 +24,11 @@ function verifyAdmin(req: Request): boolean {
 export async function GET(req: Request) {
   if (!verifyAdmin(req)) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+  }
+
+  const rl = await rateLimitDB("admin-stats:" + getClientId(req), 10, 60);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
   try {

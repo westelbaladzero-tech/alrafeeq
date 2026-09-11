@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getAdminClient } from "@/lib/supabase-server";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -25,22 +26,31 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }
 
+  const rl = await rateLimitDB("admin-users:" + getClientId(req), 10, 60);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
+  }
+
   try {
     const admin = getAdminClient();
     if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
     const { data: profiles } = await admin.from("profiles").select("id, name, email, work_type, created_at").order("created_at", { ascending: false });
 
-    const users = await Promise.all((profiles || []).map(async (p: any) => {
-      const { count } = await admin.from("transactions").select("*", { count: "exact", head: true }).eq("user_id", p.id);
-      return {
-        id: p.id,
-        name: p.name || "غير محدد",
-        email: p.email || "",
-        work_type: p.work_type || "",
-        created_at: p.created_at || "",
-        tx_count: count || 0,
-      };
+    // استعلام واحد لجلب كل user_id (بدل N+1 — يمنع DoS بطيء)
+    const { data: txRows } = await admin.from("transactions").select("user_id");
+    const countMap: Record<string, number> = {};
+    for (const t of txRows || []) {
+      if (t.user_id) countMap[t.user_id] = (countMap[t.user_id] || 0) + 1;
+    }
+
+    const users = (profiles || []).map((p: any) => ({
+      id: p.id,
+      name: p.name || "غير محدد",
+      email: p.email || "",
+      work_type: p.work_type || "",
+      created_at: p.created_at || "",
+      tx_count: countMap[p.id] || 0,
     }));
 
     return NextResponse.json({ ok: true, users });

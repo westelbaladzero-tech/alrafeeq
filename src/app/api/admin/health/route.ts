@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getAdminClient } from "@/lib/supabase-server";
 import { getTodayUsage, getMonthUsage } from "@/lib/usage";
+import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
@@ -99,6 +100,11 @@ async function testSupabase(): Promise<{ ok: boolean; latency: number; error?: s
 export async function GET(req: Request) {
   if (!verifyAdmin(req)) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+  }
+
+  const rl = await rateLimitDB("admin-health:" + getClientId(req), 10, 60);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
 
   const [gemini, groq, smtp, supabase, today, month] = await Promise.all([
