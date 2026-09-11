@@ -345,3 +345,45 @@ const expiry = Math.max(60, Math.min(86400, expiryRaw));
 نفس نمط AI routes — ثغرات بسيطة:
 - ❌ لا race conditions / mass assignment / IDOR / logic bypass
 - ✅ بس استهلاك quota + path traversal محتمل
+
+---
+
+## مراجعة ما بعد الإصلاح — اكتشاف وتصحيح التناقض الوظيفي
+
+### الاكتشاف 🔴 (commit b14362e)
+
+بعد المراجعة المركزة لـ sanad/settlement lifecycle، اكتُشف إن إصلاح `status="pending"` (commit 08e14ec) **كسر الـ workflow**:
+
+- `chat/route.ts` يحسب الرصيد اعتمادًا على `settlements.status = "confirmed"` (السطور 374, 376)
+- لكن `settlement/route.ts` صار ينشأ `status = "pending"` → التسويات الجديدة لا تظهر في حسابات الـ AI
+- لا يوجد workflow تأكيد ثنائي في التطبيق (لا مسار confirm/resolve للتسويات)
+- الـ design الأصلي: السند/التسوية موثّقة عند الإنشاء من المنشئ المصادق عليه
+
+### التصحيح ✅ (commit b14362e)
+
+الإصلاح الصحيح ليس `status="pending"` (يكسر الـ workflow)، بل **`status` ثابت `confirmed` يتجاهل العميل**:
+```typescript
+// sanad/route.ts
+status: "confirmed",  // ثابت — تجاهل من العميل
+confirmed_at: new Date().toISOString(),
+
+// settlement/route.ts
+status: "confirmed",  // ثابت — تجاهل من العميل
+```
+
+هذا:
+- ✅ يمنع التلاعب (status ثابت، لا يقبل من العميل) — الثغرة الأصلية محمية
+- ✅ يرجع للسلوك الأصلي (sanad/settlement confirmed عند الإنشاء)
+- ✅ chat يراها confirmed → الحسابات تشتغل
+
+### التحقق من الـ DB ✅
+
+استعلام Supabase: `0` سجلات pending متبقية في `sanad_records` و `settlements` — ما في سندات/تسويات أنشأت بـ status="pending" في فترة الاختبار القصيرة. الـ DB نظيف.
+
+### الدرس المهندسي 🎯
+
+> **الإصلاح الأمني المحلي الصحيح قد يكسر الـ workflow العام إذا لم تُفهم الصورة الكاملة.**
+
+إصلاح `status="pending"` كان أمنيًا صحيح (منع التلاعب)، لكنه كسر المنطق لأن التطبيق يعتمد على `confirmed` عند الإنشاء. الحل: `status` ثابت يتجاهل العميل — يحقق الأمان دون كسر الـ workflow.
+
+**هذا يثبت أهمية مبدأ عبدالله: "الإصلاح بدون فهم البنية يمكن أن يكون إفسادًا".**
