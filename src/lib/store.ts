@@ -1,4 +1,3 @@
-// @ts-nocheck
 // طبقة التخزين: محلي أولًا (خاص بكل مستخدم) ثم سحابة كنسخة احتياطية
 
 import type { Transaction } from './types';
@@ -103,6 +102,7 @@ export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>):
   if (isSupabaseEnabled && uid && isOnline()) {
     const sb = getSupabase();
     if (sb) {
+      // TODO: تعريف Database type كامل لتفعيل type safety على كل الجداول
       const { data, error } = await sb.from('transactions').insert({
         user_id: uid,
         type: tx.type,
@@ -111,7 +111,8 @@ export async function addTransaction(tx: Omit<Transaction, 'id' | 'createdAt'>):
         main: tx.main,
         method: tx.method,
         note: tx.note,
-      }).select().single();
+        person: tx.person,
+      } as any).select().single();
       if (!error && data) {
         const cloudTx = rowToTx(data);
         // حدّث المحلي بالـ id الصحيح من السحابة
@@ -143,11 +144,11 @@ export async function deleteTransaction(id: string): Promise<void> {
     saveLocal(uid, all);
   }
 
-  // احذف من السحابة لو متصل
+  // احذف من السحابة لو متصل — مع تحقق الملكية (منع IDOR)
   if (isSupabaseEnabled && uid && isOnline()) {
     const sb = getSupabase();
     if (sb) {
-      const { error } = await sb.from('transactions').delete().eq('id', id);
+      const { error } = await sb.from('transactions').delete().eq('id', id).eq('user_id', uid);
       if (!error) return;
     }
   }
