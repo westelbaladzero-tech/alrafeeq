@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { trackUsage } from "@/lib/usage";
 import { rateLimitDB, getClientId } from "@/lib/rate-limit";
 import { getAuthUserId } from "@/lib/auth-server";
+import { getAuthUserId } from "@/lib/auth-server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || "";
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -28,6 +29,10 @@ export async function POST(req: Request) {
   if (!rl.allowed) {
     return NextResponse.json({ error: "طلبات كثيرة — انتظر دقيقة" }, { status: 429 });
   }
+
+  const userId = await getAuthUserId(req as any);
+  if (!userId) return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
+
   try {
     const formData = await req.formData();
     const image = formData.get("image");

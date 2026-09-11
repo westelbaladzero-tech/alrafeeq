@@ -5,7 +5,7 @@ import { getAdminClient } from "@/lib/supabase-server";
 export async function GET(req: Request) {
   const authHeader = req.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "غير مصرّح" }, { status: 401 });
   }
 

@@ -32,6 +32,16 @@ export async function POST(req: Request) {
     const admin = getAdminClient();
     if (!admin) return NextResponse.json({ error: "خطأ إعداد" }, { status: 500 });
 
+    // احذف كل البيانات المالية والشخصية
+    await admin.from("sanad_records").delete().or(`from_user.eq.${userId},to_user.eq.${userId}`);
+    await admin.from("p2p_transactions").delete().or(`from_user.eq.${userId},to_user.eq.${userId}`);
+    await admin.from("settlements").delete().or(`from_user.eq.${userId},to_user.eq.${userId}`);
+    await admin.from("debt_requests").delete().or(`creditor.eq.${userId},debtor.eq.${userId}`);
+    await admin.from("gam3eya_turns").delete().eq("user_id", userId);
+    await admin.from("messages").delete().or(`sender_id.eq.${userId}`);
+    await admin.from("friendships").delete().or(`user_a.eq.${userId},user_b.eq.${userId}`);
+    await admin.from("payment_methods").delete().eq("user_id", userId);
+    await admin.from("relationship_change_requests").delete().eq("requester_id", userId);
     await admin.from("transactions").delete().eq("user_id", userId);
     await admin.from("chat_messages").delete().eq("user_id", userId);
     await admin.from("profiles").delete().eq("id", userId);
