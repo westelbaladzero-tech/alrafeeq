@@ -43,6 +43,13 @@ export async function POST(req: Request) {
     const bytes = audio.size;
     const mimeType = audio.type || "audio/webm";
 
+    if (!mimeType.startsWith("audio/")) {
+      return NextResponse.json({ error: "الملف ليس صوتاً" }, { status: 400 });
+    }
+    if (bytes > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "الملف الصوتي أكبر من 5 ميجابايت" }, { status: 400 });
+    }
+
     if (!GEMINI_API_KEY) {
       return NextResponse.json({
         ok: false,

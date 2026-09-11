@@ -36,8 +36,10 @@ export async function POST(req: NextRequest) {
   }
 
   const file = formData.get("file") as File | null;
-  const folder = (formData.get("folder") as string) || "chat";
-  const expiry = parseInt(formData.get("expiry") as string) || 3600;
+  const folderRaw = (formData.get("folder") as string) || "chat";
+  const folder = /^[a-zA-Z0-9_-]+$/.test(folderRaw) ? folderRaw : "chat";
+  const expiryRaw = parseInt(formData.get("expiry") as string) || 3600;
+  const expiry = Math.max(60, Math.min(86400, expiryRaw));
 
   if (!file) {
     return NextResponse.json({ error: "ملف مفقود" }, { status: 400 });
