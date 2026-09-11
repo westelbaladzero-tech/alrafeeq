@@ -68,23 +68,23 @@ export default function PeopleView() {
 
   return (
     <div className="h-full overflow-auto">
-      {/* ملخص الحسابات */}
+      {/* ملخص السجلات */}
       <div className="bg-gradient-to-br from-[var(--accent)] to-[var(--accent-dark)] text-white p-5 rounded-b-3xl shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Users size={22} /> الحسابات
+            <Users size={22} /> سجل الأشخاص
           </h2>
           <span className="text-sm bg-white/20 px-3 py-1 rounded-full">{people.length} شخص</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/15 rounded-2xl p-3 text-center">
             <ArrowDownLeft size={18} className="mx-auto mb-1 opacity-80" />
-            <div className="text-xs opacity-80">لـك (مستحق)</div>
+            <div className="text-xs opacity-80">أعطيتهم</div>
             <div className="font-bold text-lg">{totals.receivable.toLocaleString("ar-EG")}</div>
           </div>
           <div className="bg-white/15 rounded-2xl p-3 text-center">
             <ArrowUpRight size={18} className="mx-auto mb-1 opacity-80" />
-            <div className="text-xs opacity-80">علـيك (مستحق عليك)</div>
+            <div className="text-xs opacity-80">أخذت منهم</div>
             <div className="font-bold text-lg">{totals.payable.toLocaleString("ar-EG")}</div>
           </div>
         </div>
@@ -124,7 +124,7 @@ export default function PeopleView() {
                   </div>
                   <div className="text-left">
                     <div className={"font-bold " + (isOwed ? "text-green-600" : "text-red-500")}>
-                      {isOwed ? "لـك" : "علـيك"}
+                      {isOwed ? "سجّلت له" : "سجّلت عليك"}
                     </div>
                     <div className={"text-sm font-bold " + (isOwed ? "text-green-600" : "text-red-500")}>
                       {Math.abs(net).toLocaleString("ar-EG")}
@@ -143,7 +143,7 @@ export default function PeopleView() {
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-gray-500">
-                              {t.type === "income" ? "ردّ لك" : "أخذ منك"}
+                              {t.type === "income" ? "استلمت منه" : "أعطيته"}
                             </span>
                             <span className={"text-sm font-bold " +
                               (t.type === "income" ? "text-green-600" : "text-red-500")}>
